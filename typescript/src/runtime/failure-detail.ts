@@ -323,10 +323,12 @@ const truncate = (text: string, max: number) => {
  * A credential name (`privacy/credential-policy.ts`), quoted or bare and with any prefix,
  * followed by `=` or `:`. The key's word boundary is checked by `isCredentialAssignmentKey`.
  * After `=` a bracketed value (`password=[…]`) is one credential; after `:` a bracket opens a
- * JSON container, whose own leaves are screened where they are.
+ * JSON container, whose own leaves are screened where they are. Quotes may also be written as
+ * character references, as in an HTML attribute (`{&quot;password&quot;:&quot;…&quot;}`).
  */
+const quoteReference = String.raw`&(?:amp;){0,3}(?:quot|apos|#0{0,4}(?:34|39)|#x0{0,4}(?:22|27));`;
 const credentialAssignment = new RegExp(
-  String.raw`([,;|\s"'{()\]]|^)((?:[A-Za-z0-9]+[-_])*[A-Za-z0-9]*(?:${credentialNameSource}))(\\?["']?\s*[=:]\s*)(${bracketedValueSource}|\\?"(?:\\.|[^"\\])*\\?"|\\?"(?:\\.|[^"\\\r\n])*\\?|'[^']*'|[^\s;,"')}][^\s;,"')}]*)`,
+  String.raw`([,;|\s"'{()\]]|^)((?:[A-Za-z0-9]+[-_])*[A-Za-z0-9]*(?:${credentialNameSource}))((?:${quoteReference}|\\?["']?)\s*[=:]\s*)(${bracketedValueSource}|${quoteReference}(?:(?!${quoteReference})[^\r\n])*${quoteReference}|\\?"(?:\\.|[^"\\])*\\?"|\\?"(?:\\.|[^"\\\r\n])*\\?|'[^']*'|[^\s;,"')}][^\s;,"')}]*)`,
   "gi",
 );
 /** A Key Vault or Secrets Manager response holds the secret itself under `value`. */
