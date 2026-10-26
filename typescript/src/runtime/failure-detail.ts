@@ -321,12 +321,13 @@ const truncate = (text: string, max: number) => {
 
 /**
  * A credential name (`privacy/credential-policy.ts`), quoted or bare and with any prefix,
- * followed by `=` or `:`. The key's word boundary is checked by `isCredentialAssignmentKey`.
- * After `=` a bracketed value (`password=[…]`) is one credential; after `:` a bracket opens a
- * JSON container, whose own leaves are screened where they are.
+ * followed by `=`, `:` or a PHP or Ruby `=>` (`'password' => '…'`). The key's word boundary is
+ * checked by `isCredentialAssignmentKey`. After `=` or `=>` a bracketed value (`password=[…]`) is
+ * one credential; after `:` a bracket opens a JSON container, whose own leaves are screened where
+ * they are.
  */
 const credentialAssignment = new RegExp(
-  String.raw`([,;|\s"'{()\]]|^)((?:[A-Za-z0-9]+[-_])*[A-Za-z0-9]*(?:${credentialNameSource}))(\\?["']?\s*[=:]\s*)(${bracketedValueSource}|\\?"(?:\\.|[^"\\])*\\?"|\\?"(?:\\.|[^"\\\r\n])*\\?|'[^']*'|[^\s;,"')}][^\s;,"')}]*)`,
+  String.raw`([,;|\s"'{()\]]|^)((?:[A-Za-z0-9]+[-_])*[A-Za-z0-9]*(?:${credentialNameSource}))(\\?["']?\s*(?:=>|[=:])\s*)(${bracketedValueSource}|\\?"(?:\\.|[^"\\])*\\?"|\\?"(?:\\.|[^"\\\r\n])*\\?|'[^']*'|[^\s;,"')}][^\s;,"')}]*)`,
   "gi",
 );
 /** A Key Vault or Secrets Manager response holds the secret itself under `value`. */
