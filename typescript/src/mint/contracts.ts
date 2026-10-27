@@ -1325,6 +1325,8 @@ export type PublicationRequest = typeof PublicationRequest.Type;
  * - `caller_input`: the caller's own request stops the build: what it states conflicts with itself
  *   or its cited sources, a file it needs is missing, or it rules out going on, such as a stop
  *   condition it set that cannot be met. A missing fact the caller could supply is asked instead.
+ *   A stop the site caused on its own, such as an expired quote, a block, an outage or a site
+ *   error, is not `caller_input`, even when the request says to stop on it.
  *   Its basis is the report's `intent` citing the request: a field its input holds or words of its
  *   instruction (`citesCallerRequest`), or a task update the owner confirmed in an answer, by its
  *   revision or its words (`citesConfirmedUpdate`), such as a stop condition the owner picked that

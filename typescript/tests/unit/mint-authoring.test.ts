@@ -21,6 +21,10 @@ import {
   publicationWriteOutcomePolicy,
   publicationWritePathPolicy,
 } from "../../src/guardian/publication.js";
+import {
+  guardianExecutionPolicy,
+  nativeExecutionEnvironment,
+} from "../../src/guardian/execution-policy.js";
 import { inputFeedbackInstruction } from "../../src/mint/input-feedback.js";
 import {
   type AuthoringOptions,
@@ -1117,6 +1121,23 @@ it("has a write put its step back before asking a field its click proved missing
   );
 });
 
+// A quote that expired before its commit is refreshed and committed once more, and a commit the
+// site refused with nothing created goes back unsent. Guardian's reviews accept both, so a write
+// that follows the skill is neither denied as a second submission nor flagged at publication.
+it("has a write retry an expired quote once, which Guardian's reviews accept", async () => {
+  const texts = await renderedTexts("typescript/authoring");
+  const writes = (texts.get("writes") ?? "").replace(/\s+/g, " ");
+  expect(writes).toContain(
+    "When the site answers the click by saying the quote expired or the price changed, with that proof that it created nothing, call `notCommitted` for the step, refresh the quote and check it again, then call `enteringCommit` again and click once more.",
+  );
+  expect(guardianExecutionPolicy(nativeExecutionEnvironment)).toContain(
+    "Nor is it when the site's own answer to the first click refused it as a whole and showed nothing was created, such as a quote that expired or a price that changed, and the step called notCommitted for that step once, refreshed the quote and checked it against the caller's limits before entering it again for one more click.",
+  );
+  expect(guardianPublicationPolicy).toContain(
+    "Nor is a `notCommitted` for a step right after the site's own answer to its click refused it as a whole and showed nothing was created, such as a commit response reporting an expired quote and no record, followed by a refusal with the site's words, or by one refresh, a check of the fresh quote against the caller's limits and one more entered click.",
+  );
+});
+
 // A write still refuses an option the page does not offer, unless the caller's own task asks for
 // whatever the site ends up with: then it follows the site's preselected substitute and returns it.
 it("has a write follow the site's substitute only when the caller's task asks for what it ends up with", async () => {
@@ -1248,11 +1269,11 @@ it("renders the pinned standalone authoring", async () => {
     ["ad5b4f8391094f6d7c8ff4a480b071bb298807da9523971e0aaf7d719f152664", "testing"],
     ["2b559ad88157f28be2a054787f4c736cf192bb825760bdf3050c01a59d060ba8", "pagination"],
     ["c21b3e69771470e4ae72b6c88201a2b6fad8d3eea76f4ebfda47993aeb351448", "forms"],
-    ["b2a190fa9682aabf7adcf45a3aad87aac98e7456f4693133d514e063dedd4211", "writes"],
+    ["7f98dd922b6144d74044befa40f30e26c262055335f9117e660bfa8becf87b61", "writes"],
     ["b27e2f41a137ef6d981341a6d384f78899b1e53bdebbf9f64b3ff5209d275bd1", "cart"],
     ["c91deddad323e3c996cc3a172812a1cfd2e14eba76f0552264384708c7d13c58", "caller-input"],
     ["04e9f9dca786e3cf3f125a52d5bc73d71506387db521ad3ac53f8ca13dd5dd6e", "publication"],
-    ["14c3d6c04ac38b5eaa5c4076d4580d8a644788aaf03a02f70312811be8e05b1d", "workspace/AGENTS.md"],
+    ["e6a91d90cd515385aa8a7073a5435ac00a4f2dbaaa045cffd3b290e9b497dc91", "workspace/AGENTS.md"],
     ["9501ae9c273d5d4db8976a544879f7aee44212c8a616b00e74263dcd3c593035", "workspace/README.md"],
   ]);
 });
@@ -1373,7 +1394,7 @@ it("renders the search URL fast path only when a host turns it on", async () => 
     [sha256(on.agents), "workspace/AGENTS.md"],
   ]).toStrictEqual([
     ["0386d3e23fb8cd652f7c64320b940b6a61c7ed9fb3315579fe5521c835789b42", "search"],
-    ["a6ac75c2514c09b9f99346c5ef63fb31befd0d306e314b76ceb77b955b8fa010", "workspace/AGENTS.md"],
+    ["8cdb4e10da001832e65d3d6693de61d85ddfcbcc0c78a4b87fa6d5f5766bb218", "workspace/AGENTS.md"],
   ]);
   expect(on.digests.filter(([, name]) => name !== "search")).toStrictEqual(
     off.digests.filter(([, name]) => name !== "search"),
