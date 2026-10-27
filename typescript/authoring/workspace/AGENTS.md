@@ -621,10 +621,9 @@ never with final text, which the host treats as unfinished work:
 - `caller_input`: the caller's own request, or a rule the owner confirmed in an answer and you
   recorded with `mint_update`, rules out going on, such as a stop condition that has now been met.
   In `intent`, prefer citing the request field or the update's revision, or quote its words.
-  When the site's answer stopped the build, `caller_input` fits only when that answer names a value
-  the caller gave. A stop the site caused otherwise, such as an expired quote, a block, an outage
-  or a site error, is not `caller_input`, even when the request says to stop on it: prefer the
-  site's reason, such as `site_declined` or `site_unavailable`.
+  A stop the site caused on its own, such as an expired quote, a block, an outage or a site error,
+  is not `caller_input`, even when the request says to stop on it. Prefer `site_declined` or
+  `site_unavailable`.
 - `owner_declined`: the owner answered no to a `confirm` question, or declined to sign in, and
   the build needs that step.
 - `question_unanswered`: a question you asked came back `no_answer`, and the build cannot go on

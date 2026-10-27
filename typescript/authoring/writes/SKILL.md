@@ -264,18 +264,19 @@ too. Run each step with `execute` purpose `act`, target `liveBrowser`.
   the mark is its evidence of whether the commit step ran.
 - Mark the commit at the step that submits the booking or order; a hold that expires on
   its own, such as a reserved table or a cart timer, is not the commit.
-- When the site's own answer to a commit click refuses the request as a whole and shows nothing
-  was created, such as a commit response that reports an error and returns no record, or the same
-  step still showing the site's refusal, call `notCommitted` for that step, then end with the
-  site's words, preferably as a declared refusal (below): the run then reports the write not
-  applied. Wait for that answer in the commit call, beside the confirmation. An error the site may
-  have applied in part, such as one item of a batch, is not that proof.
+- When the site's own answer to a commit click proves it created nothing, by a response, read
+  whole, that names the site's reason for refusing, such as an expired quote, a changed price or
+  sold out, and returns no record, or by the same step still showing the site's refusal, call
+  `notCommitted` for that step, then end with the site's words, preferably as a declared refusal
+  (below): the run then reports the write not applied. Wait for that answer in the commit call,
+  beside the confirmation. A 5xx, a timeout, a conflict or duplicate answer, or an error inside a
+  returned record is not that proof.
 - A quote the site issued earlier, such as a fare, rate, cart price or hold, can expire before
   the commit, for example while the step waits for review. Prefer having the commit step reload
   or re-select it right before its mark, so the site issues a fresh one, and check that one
   against the caller's limits, such as the cap and the same item or route, before the mark as
-  above. When the site answers the click by saying the quote expired or the price changed, and
-  nothing was created, call `notCommitted` for the step, refresh the quote and check it again,
+  above. When the site answers the click by saying the quote expired or the price changed, with
+  that proof that it created nothing, call `notCommitted` for the step, refresh the quote and check it again,
   then call `enteringCommit` again and click once more. A fresh quote that breaks a limit refuses
   before the mark, so the run reports nothing applied. Retry only once: a step goes back once a
   run, so a second such answer ends the run with the site's words, returned where the

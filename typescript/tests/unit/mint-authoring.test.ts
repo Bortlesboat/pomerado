@@ -1128,7 +1128,7 @@ it("has a write retry an expired quote once, which Guardian's reviews accept", a
   const texts = await renderedTexts("typescript/authoring");
   const writes = (texts.get("writes") ?? "").replace(/\s+/g, " ");
   expect(writes).toContain(
-    "When the site answers the click by saying the quote expired or the price changed, and nothing was created, call `notCommitted` for the step, refresh the quote and check it again, then call `enteringCommit` again and click once more.",
+    "When the site answers the click by saying the quote expired or the price changed, with that proof that it created nothing, call `notCommitted` for the step, refresh the quote and check it again, then call `enteringCommit` again and click once more.",
   );
   expect(guardianExecutionPolicy(nativeExecutionEnvironment)).toContain(
     "Nor is it when the site's own answer to the first click refused it as a whole and showed nothing was created, such as a quote that expired or a price that changed, and the step called notCommitted for that step once, refreshed the quote and checked it against the caller's limits before entering it again for one more click.",
@@ -1269,11 +1269,11 @@ it("renders the pinned standalone authoring", async () => {
     ["ad5b4f8391094f6d7c8ff4a480b071bb298807da9523971e0aaf7d719f152664", "testing"],
     ["2b559ad88157f28be2a054787f4c736cf192bb825760bdf3050c01a59d060ba8", "pagination"],
     ["c21b3e69771470e4ae72b6c88201a2b6fad8d3eea76f4ebfda47993aeb351448", "forms"],
-    ["a0ce8e9809bb32b6ce470cacfa8438546bba7c28e80344b840626642272ae66d", "writes"],
+    ["9046b15da1b2b82aaf8239fd9c299ea2230aa271cc3f0ba731e1a6866744fb48", "writes"],
     ["01eb1c98d8945987929ca3d8c68d4d848e64415d2042fc844166a490ca9457cb", "cart"],
     ["c91deddad323e3c996cc3a172812a1cfd2e14eba76f0552264384708c7d13c58", "caller-input"],
     ["04e9f9dca786e3cf3f125a52d5bc73d71506387db521ad3ac53f8ca13dd5dd6e", "publication"],
-    ["dc53121800fe80b42e7ae9dfae87bec43e7f94cfd874bf9ba3ea6cbb0dec9d4e", "workspace/AGENTS.md"],
+    ["89df921999620577e5abcedc624a8d9ca244097f373c977d4492a9cba44cff24", "workspace/AGENTS.md"],
     ["9501ae9c273d5d4db8976a544879f7aee44212c8a616b00e74263dcd3c593035", "workspace/README.md"],
   ]);
 });
@@ -1394,7 +1394,7 @@ it("renders the search URL fast path only when a host turns it on", async () => 
     [sha256(on.agents), "workspace/AGENTS.md"],
   ]).toStrictEqual([
     ["0386d3e23fb8cd652f7c64320b940b6a61c7ed9fb3315579fe5521c835789b42", "search"],
-    ["cb0295bd0769a0c9659bc0b3a540b0f2bbceafa08cd10e224cae48f9ba9434d1", "workspace/AGENTS.md"],
+    ["aedddd8e13a061324ed02bb2b20886487cf54825cf3e55e68beb49e12a756fbf", "workspace/AGENTS.md"],
   ]);
   expect(on.digests.filter(([, name]) => name !== "search")).toStrictEqual(
     off.digests.filter(([, name]) => name !== "search"),
