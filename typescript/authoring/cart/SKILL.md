@@ -1,6 +1,6 @@
 ---
 name: cart
-description: Read before building any tool that reads, adds to, changes or checks out a cart: sign in first, read the cart before and after, quantity, account values and site limits.
+description: Read before building any tool that reads, adds to, changes or checks out a cart: when to sign in or check out as a guest, read the cart before and after, quantity, account values and site limits.
 ---
 
 # Carts and checkout
@@ -8,12 +8,18 @@ description: Read before building any tool that reads, adds to, changes or check
 Read this for any tool that reads, adds to, changes or checks out a cart. For a write, the
 writes skill's session, commit and publication rules still apply; this adds what a cart needs.
 
-## Sign in first
+## Sign in, or check out as a guest
 
-A cart or checkout always runs on the caller's account, because a signed-out cart lives in one
-browser session and a later call cannot find it. Sign in before reading or changing the cart
-(for a write, before the first `act` step; the auth skill), even when the site lets a guest add to a cart. Never use a signed-out cart in place of
-the account's, and never judge the account's cart from one.
+A cart a later call must find, such as a standalone add-to-cart, view-cart, change-cart or
+checkout tool's, runs on the caller's account, because a signed-out cart lives in one browser
+session. Sign in before reading or changing it (for a write, before the first `act` step; the
+auth skill), even when the site lets a guest add to a cart, and judge the account's cart only
+from the account.
+
+A tool that fills the cart and places the order in the same run may use the site's guest
+checkout when the site offers one and the build holds no login. Prefer it to creating an
+account. Decide before you sign in, since a build that sent a login keeps it. Take the guest's
+contact details as inputs and the card as the caller-input skill says.
 
 ## Take the product as the site's tools do
 
@@ -74,5 +80,5 @@ completed the write, so it never publishes.
 ## Description
 
 The description states the decisions a caller needs to use the tool right (the publication
-skill): that it acts on the signed-in account's cart, whether quantity adds or sets, what it
-returns, and what it leaves out, such as placing the order.
+skill): that it acts on the signed-in account's cart or checks out as a guest, whether
+quantity adds or sets, what it returns, and what it leaves out, such as placing the order.
