@@ -482,7 +482,7 @@ export const publicationOutputNotesPolicy =
 
 /** The rules only a cart or checkout tool adds; the shared rules above cover its reconciliation. */
 export const publicationCartPolicy =
-  "A cart tool (one that reads, adds to, changes or checks out a cart) runs signed in; without a verified sign-in in trusted_execution_context, that is an unsupported_claim finding with reason evidence at the description. In a cart tool these are schema_mismatch findings with reason source_correction: not saying whether quantity adds or sets, or code doing the other; saving a value to the account unasked; adding items or raising a quantity to meet a site minimum instead of throwing InvalidInput with the site's reason.";
+  "A cart tool (one that reads, adds to, changes or checks out a cart) runs signed in, unless it fills the cart and places the order in the same run through the site's guest checkout and its description says so; without a verified sign-in in trusted_execution_context, any other cart tool is an unsupported_claim finding with reason evidence at the description. In a cart tool these are schema_mismatch findings with reason source_correction: not saying whether quantity adds or sets, or code doing the other; saving a value to the account unasked; adding items or raising a quantity to meet a site minimum instead of throwing InvalidInput with the site's reason.";
 
 /** A safety default the source sets is part of a good tool, and a later edit can't drop it. */
 export const publicationSafetyDefaultPolicy =
