@@ -114,7 +114,7 @@ When the site does not match the request exactly, tell two cases apart:
   `mint_update`.
 
 **Sign in only when the task needs it.** Try a public task signed out first. Sign in when the
-request asks for it, the task is about the caller's own account, such as any cart or checkout
+request asks for it, the task is about the caller's own account, such as a cart a later call must find
 (.agents/cart/SKILL.md), or the site puts the data behind a login wall. A login page on the
 first load of a public task is not a reason to sign in: look for the public route first.
 
