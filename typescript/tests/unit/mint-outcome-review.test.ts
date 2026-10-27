@@ -562,7 +562,7 @@ it("settles a write done from its own commit request's status in the step's resu
   // A request the site queued counts, a 200 whose body reports an error is a failed commit, and a
   // commit step with no request settles nothing by itself.
   expect(instructions).toContain(
-    "counts only when the step's result shows that body held none. A 200 whose body reports an error, as GraphQL can, did not go through. A 202, or a 2xx whose body says the work is queued, counts too.",
+    "counts only when the step's result shows that body held none. A 200 whose body reports an error, as GraphQL can, does not count as done, and is not_done only when it meets the not_done bar below. A 202, or a 2xx whose body says the work is queued, counts too.",
   );
   expect(instructions).toContain(
     "or a commit step with no commit request recorded, which a websocket or GET commit can explain.",

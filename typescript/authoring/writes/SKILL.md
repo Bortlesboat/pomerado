@@ -266,11 +266,10 @@ too. Run each step with `execute` purpose `act`, target `liveBrowser`.
   its own, such as a reserved table or a cart timer, is not the commit.
 - When the site's own answer to a commit click proves it created nothing, by a response, read
   whole, that names the site's reason for refusing, such as an expired quote, a changed price or
-  sold out, and returns no record, or by the same step still showing the site's refusal, call
-  `notCommitted` for that step, then end with the site's words, preferably as a declared refusal
-  (below): the run then reports the write not applied. Wait for that answer in the commit call,
-  beside the confirmation. A 5xx, a timeout, a conflict or duplicate answer, or an error inside a
-  returned record is not that proof.
+  sold out, and returns no record, call `notCommitted` for that step, then end with the site's
+  words, preferably as a declared refusal (below): the run then reports the write not applied.
+  Wait for that answer in the commit call, beside the confirmation. A 5xx, a timeout, a conflict or
+  duplicate answer, or an error inside a returned record is not that proof.
 - A quote the site issued earlier, such as a fare, rate, cart price or hold, can expire before
   the commit, for example while the step waits for review. Prefer having the commit step reload
   or re-select it right before its mark, so the site issues a fresh one, and check that one
