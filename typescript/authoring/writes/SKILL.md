@@ -29,7 +29,7 @@ read, even through a Save button, and so is entering the details the caller gave
 unless the step creates an account or a lasting record on the site (core skill). While building,
 a live step, the example's or a test case's, that enters a name, email or phone asks the owner
 first, as the execution review requires; the answer keeps the build a read. Adding to a cart, a hold on inventory, a seat or a time slot, an upload and a draft stay writes,
-signed out too.
+signed out too. Never click a control that can add to a cart in an explore to see what it opens; that click is a write. Read the item's options from the page or the item's own page instead.
 
 ## When a read build finds it needs to write
 
