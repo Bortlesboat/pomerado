@@ -294,6 +294,10 @@ if (
 // submit call compares against it with no address in its code.
 const typedAt = ${JSON.stringify(typedAt)};
 const readsOnly = ${JSON.stringify(call.kind === "submit")} && fields.length > 0 && submit === null;
+// A look clicks nothing, and the host takes one only before it clicked. codeLook: one at a step
+// whose every field takes a code.
+const looking = ${JSON.stringify(call.kind === "submit" && call.look === true)};
+const codeLook = looking && fields.length > 0 && codeSlots.every(Boolean);
 ${call.kind === "submit" ? pageSentCode : call.kind === "dismiss" ? "" : "await keep(typedAt, primary.url());"}
 for (const check of ${JSON.stringify(check)}) {
   // Its length only, never its value.
@@ -349,7 +353,9 @@ const codeBoxesHoldCode = (boxes: readonly number[]) =>
  * only, never a value; a field it cannot read fails the call, as the check's own read does there
  * (`readsOnly`). A step with a submit is the host's to click: a form that locks, moves or
  * redraws itself while it checks what was typed has not sent it, and the submit call waits on it
- * or refuses as before.
+ * or refuses as before. A code step's look before the host clicked (`codeLook`) is the exception:
+ * a code screen that locks or empties every box the host typed, with nothing clicked, took the code
+ * itself, as a widget with no submit does. Its address moving is still no send.
  */
 const pageSentCode = `const originAndPath = (url) => {
   try {
@@ -363,13 +369,15 @@ if (readsOnly) {
   const typedPage = await kept(typedAt);
   if (typeof typedPage === "string" && originAndPath(typedPage) !== originAndPath(primary.url()))
     return { pageSent: true, url: primary.url() };
+}
+if (readsOnly || codeLook) {
   const fieldsDisabled = await Promise.all(
     fields.map(({ locator }) => locator.isDisabled({ timeout: 1000 }).catch(() => false)),
   );
   if (fieldsDisabled.every(Boolean)) return { pageSent: true, url: primary.url() };
 }
 const allEmptied = async () => {
-  if (fields.length < 2 || !readsOnly) return false;
+  if (fields.length < 2 || !(readsOnly || codeLook)) return false;
   for (const { locator } of fields) {
     const empty = await locator.evaluate(
       (element) => typeof element.value === "string" && element.value.length === 0,
