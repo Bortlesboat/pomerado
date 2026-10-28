@@ -1208,7 +1208,10 @@ it("has a tool return the site's no to a valid request as a declared refusal quo
     "- A write that declines the task because the caller's own limit or the page's state rules it out, such as a total over the caller's price limit or a product number whose page names another item than the caller's: `InvalidInput`, thrown before the mark of the commit it guards (writes skill). Pass `field`, the input the caller would change, `kind`, the reason as a stable lowercase token such as `over_price_limit` or `item_mismatch`, and `available` where the page lists choices,",
   );
   expect(text("caller-input")).toContain(
-    "A write returns a refusal as its output only when its output schema declares that refusal, and only where the writes skill says one completes the run, such as before its first mark: any other output a write returns without `verified()` reports a possible change. - When the site itself says no to a valid request, such as an item out of stock or a variant it does not offer, prefer the writes skill's refusal quoting the site. - A write whose steps",
+    "A write returns a refusal as its output only when its output schema declares that refusal, and only where the writes skill says one completes the run, such as before its first mark: any other output a write returns without `verified()` reports a possible change.",
+  );
+  expect(text("caller-input")).toContain(
+    "- When the site itself says no to a valid request, such as an item out of stock or a variant it does not offer, prefer the writes skill's refusal quoting the site. - A write whose steps",
   );
   expect(text("caller-input")).toContain(
     "(writes skill). - A read whose site says no to the whole request, such as a product it no longer sells, prefers returning that no as a declared refusal with `site_message` over throwing (writes skill). - A write that declines",
@@ -1271,7 +1274,7 @@ it("renders the pinned standalone authoring", async () => {
     ["4d05ffc26a395fafb591bb8ac593b79ae7450f21f26ac8709cbbe543fc2453df", "forms"],
     ["ae84ba5cd3c71b639c886e82930f9c7f022b88583380ca208e13dd7788eb2170", "writes"],
     ["d06f650fc09f74d3711e043da2303de97ced42c9ff2541d48ec28cd7e686519d", "cart"],
-    ["14ec800f1f19a16e1a94c11e8a4e869e798bf597d86cd2369a51d32d66c9bc94", "caller-input"],
+    ["3b3b87ecb3d9c219037c250212bdc3eab72fc8c1388b07c0aab12f8c4f7a9ce6", "caller-input"],
     ["fb7cd6b0929612a94dd6e0a3c54fa42e102ada77ccd83059fe818a01d8307cf0", "publication"],
     ["e6a91d90cd515385aa8a7073a5435ac00a4f2dbaaa045cffd3b290e9b497dc91", "workspace/AGENTS.md"],
     ["9501ae9c273d5d4db8976a544879f7aee44212c8a616b00e74263dcd3c593035", "workspace/README.md"],
