@@ -484,12 +484,18 @@ export const readBackMatches = (shown: string, wanted: string): boolean =>
  * name never reads as a state. Every form but the first is folded as `foldChoiceText` folds,
  * lower case and with `.`, `,` and hyphens between letters read as spaces. At most 32 forms: past
  * that, the first words keep the value's own form and the last words' forms are kept, since a
- * place's code, which counts only at the end, is the form a picker most often needs.
+ * place's code, which counts only at the end, is the form a picker most often needs. With
+ * `options.places` set to "after-words", a place's code and name are tried only after another word
+ * of the value, so a lone Ontario or Washington DC keeps its own form; with "never", never.
  *
  * It is pure and self-contained: the page code of `pickerCode` embeds this same function, so a
  * picker tries each form of the caller's value against the site's options.
  */
-export const spellingsOf = (value: string): string[] => {
+export const spellingsOf = (
+  value: string,
+  options: { readonly places?: "end" | "after-words" | "never" } = {},
+): string[] => {
+  const placeMode = options.places ?? "end";
   const raw = String(value ?? "").replace(/\s+/gu, " ").trim();
   if (raw === "") return [];
   const words = raw
@@ -550,20 +556,21 @@ export const spellingsOf = (value: string): string[] => {
   // Each form of the longest word or phrase with other forms that starts at `at`.
   const formsAt = (at: number): { readonly length: number; readonly forms: string[][] } => {
     let best: { length: number; forms: string[][] } = { length: 1, forms: [[words[at] ?? ""]] };
-    const consider = (groups: readonly (readonly string[])[], place: boolean) => {
+    const consider = (groups: readonly (readonly string[])[], place: boolean, keep: boolean) => {
       for (const group of groups)
         for (const form of group) {
           const phrase = form.split(" ");
           if (phrase.length < best.length || !holds(at, phrase)) continue;
           if (place && !endsValue(at + phrase.length)) continue;
-          const others = group.filter((other) => other !== form).map((other) => other.split(" "));
+          const others = keep ? group.filter((other) => other !== form).map((other) => other.split(" ")) : [];
           if (phrase.length > best.length) best = { length: phrase.length, forms: [phrase] };
           for (const other of others)
             if (!best.forms.some((known) => known.join(" ") === other.join(" "))) best.forms.push(other);
         }
     };
-    consider(anywhere, false);
-    consider(places, true);
+    consider(anywhere, false, true);
+    // A place the value opens with keeps its own form after words only, but still spans its words.
+    if (placeMode !== "never") consider(places, true, placeMode === "end" || at > 0);
     return best;
   };
   const forms: string[] = [];

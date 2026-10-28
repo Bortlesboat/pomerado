@@ -49,7 +49,10 @@ export type PickerRanking =
  * spelling against option names, never values, once the spellings as given match nothing at that
  * rank: so Fifth Avenue for 5th Avenue matches as a name before any option holding the same words
  * in another order, while a spelling that already matches at a rank is never overruled by one of
- * its forms. Each name and each list of spellings is read once per call.
+ * its forms. As whole words, a place's other form counts only after the value's other words and
+ * where it ends the name or one of its parts, so Ontario never matches Turn on and Example City,
+ * Oregon never matches Example City or Town. Each name and each list of spellings is read once per
+ * call.
  *
  * It is pure and self-contained: the page code of `pickerCode` embeds this same function with
  * `fold` set to `foldChoiceText`.
@@ -61,7 +64,10 @@ export const rankChoices = (
   options: {
     readonly leading?: boolean;
     readonly stem?: boolean;
-    readonly spellings?: (text: string) => readonly string[];
+    readonly spellings?: (
+      text: string,
+      options?: { readonly places?: "end" | "after-words" | "never" },
+    ) => readonly string[];
   } = {},
 ): PickerRanking => {
   const squash = (text: string) => String(text ?? "").replace(/\s+/gu, " ").trim();
@@ -85,7 +91,9 @@ export const rankChoices = (
       .map(words)
       .filter((part) => part.length > 0);
     const all = parts.flat();
-    return { parts, all, numbers: all.filter((word) => /\p{N}/u.test(word)).join(" ") };
+    // Where each part ends, counted in words.
+    const ends = parts.map((_, index) => parts.slice(0, index + 1).flat().length);
+    return { parts, all, ends, numbers: all.filter((word) => /\p{N}/u.test(word)).join(" ") };
   };
   // Whether `target` is `parts` laid end to end in some order, each part's words in its order.
   const composes = (target: readonly string[], parts: readonly (readonly string[])[]) => {
@@ -120,14 +128,21 @@ export const rankChoices = (
   };
   const spellings = wanted.map(squash).filter((spelling) => spelling !== "");
   // The other written forms of the spellings, such as Fifth for 5th, which only names match.
-  const others = [
+  const formsOf = (places: "end" | "after-words" | "never") => [
     ...new Set(
       spellings
-        .flatMap((spelling) => options.spellings?.(spelling) ?? [])
+        .flatMap((spelling) => options.spellings?.(spelling, { places }) ?? [])
         .map(squash)
         .filter((form) => form !== "" && !spellings.includes(form)),
     ),
   ];
+  const others = formsOf("end");
+  // As whole words, a place's other form, such as on for Ontario or or for Oregon, counts only
+  // after the value's other words and where it ends the name or one of its parts: alone it is a
+  // common word, as in Turn on or Yes or no.
+  const plainOthers = formsOf("never");
+  const wordOthers = [...new Set([...plainOthers, ...formsOf("after-words")])];
+  const placed = new Set(wordOthers.filter((form) => !plainOthers.includes(form)));
   // What a rank reads from a list of spellings, worked out once per list rather than per option.
   const perList = <T>(make: (list: readonly string[]) => T) => {
     const known = new Map<readonly string[], T>();
@@ -140,7 +155,10 @@ export const rankChoices = (
     lower: perList((list) => new Set(list.map(lower).filter((spelling) => spelling !== ""))),
     fold: perList((list) => new Set(list.map(fold).filter((spelling) => spelling !== ""))),
   };
-  const phrases = perList((list) => list.map(phrase).filter((part) => part.trim() !== ""));
+  const phrases = perList((list) => ({
+    anywhere: list.filter((form) => !placed.has(form)).map(phrase).filter((part) => part.trim() !== ""),
+    ending: list.filter((form) => placed.has(form)).map(words).filter((each) => each.length > 0),
+  }));
   const wordLists = perList((list) => list.map(words).filter((each) => each.length > 0));
   const partLists = perList((list) => list.map(parted).filter((each) => each.all.length > 1));
   type Test = (choice: PickerChoice, list: readonly string[]) => boolean;
@@ -177,10 +195,15 @@ export const rankChoices = (
     [
       "words",
       (choice, list) => {
-        const parts = phrases(list);
+        const { anywhere, ending } = phrases(list);
         return choice.names.some((name) => {
           const have = named.phrase(name);
-          return parts.some((part) => have.includes(part));
+          if (anywhere.some((part) => have.includes(part))) return true;
+          if (ending.length === 0) return false;
+          const { all, ends } = named.parted(name);
+          return ending.some((want) =>
+            ends.some((end) => end >= want.length && want.every((word, at) => all[end - want.length + at] === word)),
+          );
         });
       },
       true,
@@ -219,7 +242,8 @@ export const rankChoices = (
   for (const [rank, test, byName] of tests) {
     // At each rank the spellings as given decide first; their other forms only when they match
     // nothing there, and never an option's value.
-    const lists = byName && others.length > 0 ? [spellings, others] : [spellings];
+    const forms = rank === "words" ? wordOthers : others;
+    const lists = byName && forms.length > 0 ? [spellings, forms] : [spellings];
     for (const list of lists) {
       const matched = choices.flatMap((choice, index) => (test(choice, list) ? [index] : []));
       if (matched.length === 0) continue;

@@ -119,7 +119,7 @@ describe("rankChoices", () => {
       rank: "allWords",
     });
     // Numbers in the same order as the value's still match.
-    expect(rank([choice("Springfield, 12 Main St 62701")], "12 Main St 62701 Springfield")).toEqual({
+    expect(rank([choice("Exampleville, 12 Main St 62701")], "12 Main St 62701 Exampleville")).toEqual({
       status: "picked",
       index: 0,
       rank: "allWords",
@@ -210,8 +210,31 @@ describe("rankChoices other written forms", () => {
     const cities = [choice("Exampleton, California"), choice("Exampleton, Example Country")];
     expect(rank(cities, "Exampleton CA")).toEqual({ status: "missing" });
     expect(rankForms(cities, "Exampleton CA")).toEqual({ status: "picked", index: 0, rank: "folded" });
-    const springfields = [choice("Springfield, Illinois, USA"), choice("Springfield, Missouri, USA")];
-    expect(rankForms(springfields, "Springfield IL")).toEqual({ status: "picked", index: 0, rank: "words" });
+    const towns = [choice("Exampleville, Illinois, USA"), choice("Exampleville, Missouri, USA")];
+    expect(rankForms(towns, "Exampleville IL")).toEqual({ status: "picked", index: 0, rank: "words" });
+    expect(rankForms([choice("Example City, Oregon"), choice("Example City, Ohio")], "Example City, OR")).toEqual({
+      status: "picked",
+      index: 0,
+      rank: "folded",
+    });
+    expect(rankForms([choice("Example Hub - Ontario - Canada"), choice("Example Hub - Quebec - Canada")], "Example Hub ON")).toEqual({
+      status: "picked",
+      index: 0,
+      rank: "words",
+    });
+  });
+
+  test("a place's other form matches as words only after the value's other words, ending the name or one of its parts", () => {
+    // A lone place's code is a common word, so it never matches a name merely holding that word.
+    expect(rankForms([choice("Turn on")], "Ontario")).toEqual({ status: "missing" });
+    expect(rankForms([choice("Yes or no")], "Oregon")).toEqual({ status: "missing" });
+    expect(rankForms([choice("Sign in")], "Indiana")).toEqual({ status: "missing" });
+    expect(rankForms([choice("Contact me")], "Maine")).toEqual({ status: "missing" });
+    expect(rankForms([choice("Example DC Hub")], "Washington DC")).toEqual({ status: "missing" });
+    // After other words, the place's form must end the name or one of its parts.
+    expect(rankForms([choice("Example City or Town")], "Example City, Oregon")).toEqual({ status: "missing" });
+    // A lone place still matches a whole name.
+    expect(rankForms([choice("ON"), choice("QC")], "Ontario")).toEqual({ status: "picked", index: 0, rank: "normalized" });
     expect(rankForms([choice("Central Station, Washington, D.C."), choice("Central Station, Example City")], "Central Station DC")).toEqual({
       status: "picked",
       index: 0,
@@ -239,9 +262,14 @@ describe("spellingsOf", () => {
   });
 
   test("reads a state code only where a place ends the value, before a postal code or country at most", () => {
-    expect(spellingsOf("Springfield IL 62701")).toContain("springfield illinois 62701");
+    expect(spellingsOf("Exampleville IL 62701")).toContain("exampleville illinois 62701");
     expect(spellingsOf("Example City ON M5V 2T6")).toContain("example city ontario m5v 2t6");
-    expect(spellingsOf("Pizza in Springfield")).toEqual(["Pizza in Springfield"]);
+    expect(spellingsOf("Pizza in Exampleville")).toEqual(["Pizza in Exampleville"]);
+    // With places after words only, a lone place keeps its own form; with never, any place does.
+    expect(spellingsOf("Ontario", { places: "after-words" })).toEqual(["Ontario"]);
+    expect(spellingsOf("Washington DC", { places: "after-words" })).toEqual(["Washington DC"]);
+    expect(spellingsOf("Example Hub ON", { places: "after-words" })).toContain("example hub ontario");
+    expect(spellingsOf("Example Hub ON", { places: "never" })).toEqual(["Example Hub ON"]);
     expect(spellingsOf("Washington DC")).toContain("washington d c");
   });
 
@@ -258,8 +286,8 @@ describe("spellingsOf", () => {
       "1st 2nd 3rd 4th 5th sixth street",
       "1st 2nd 3rd 4th 5th sixth saint",
     ]);
-    expect(spellingsOf("Example Plaza 1st 2nd 3rd 4th 5th 6th Springfield IL")).toContain(
-      "example plaza 1st 2nd 3rd 4th 5th 6th springfield illinois",
+    expect(spellingsOf("Example Plaza 1st 2nd 3rd 4th 5th 6th Exampleville IL")).toContain(
+      "example plaza 1st 2nd 3rd 4th 5th 6th exampleville illinois",
     );
   });
 });

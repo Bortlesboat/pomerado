@@ -530,7 +530,8 @@ const pickerPageCode = String.raw`(element, args) => {
  * `title` and, for a table row, each cell, and its value is `data-value`, `value`, `data-id`,
  * `data-key` or `data-code` (put others first with `options.valueAttributes`). At each rank, once
  * the value as given matches no name there, its other written forms (`spellingsOf`: 5th and Fifth,
- * St and Street or Saint, Ave and Avenue, a state's code and name where a place ends the value,
+ * St and Street or Saint, Ave and Avenue, a state's code and name where a place ends the value
+ * (as whole words, only after the value's other words and ending the name or one of its parts),
  * and the like) are tried against names, so Fifth Avenue for 5th Avenue outranks an option with
  * the same words in another order. Two options at the best rank are ambiguous; an "Add ..." or "Create
  * ..." row is never matched.
