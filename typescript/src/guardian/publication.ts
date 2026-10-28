@@ -10,6 +10,8 @@ import {
   PublicationFinding,
   publicationRefusalUnfixable,
   PublicationReason,
+  ResponseRuling,
+  rulingReasonLimit,
 } from "./review-contracts.js";
 import type { PublicationScope } from "./review-contracts.js";
 import { ReviewFailure } from "./review.js";
@@ -24,6 +26,7 @@ const PublicationDecision = Schema.Struct({
   reason: PublicationReason,
   rationale: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(4000)),
   findings: Schema.Array(PublicationFinding).pipe(Schema.maxItems(64)),
+  responseRulings: Schema.optional(Schema.Array(ResponseRuling).pipe(Schema.maxItems(64))),
   publicReason: Schema.optional(Schema.String),
 });
 type Decision = typeof PublicationDecision.Type;
@@ -159,6 +162,23 @@ export const anchorQuotedFindings = (
     }
     return { ...raw, findings: anchored };
   });
+
+/** Each ruling's reason cut to its limit, rather than failing the whole decision. */
+const boundedRulings = (raw: unknown): unknown => {
+  if (typeof raw !== "object" || raw === null) return raw;
+  const rulings: unknown = Reflect.get(raw, "responseRulings");
+  if (!Array.isArray(rulings)) return raw;
+  return {
+    ...raw,
+    responseRulings: rulings.map((ruling: unknown) => {
+      const reason: unknown =
+        typeof ruling === "object" && ruling !== null ? Reflect.get(ruling, "reason") : undefined;
+      return typeof reason === "string"
+        ? { ...(ruling as object), reason: cutToLimit(reason, rulingReasonLimit) }
+        : ruling;
+    }),
+  };
+};
 
 /** Each finding's explanation cut to its limit, rather than failing the whole decision. */
 const boundedExplanations = (raw: unknown): unknown => {
@@ -326,7 +346,7 @@ export const decodePublicationDecision = (scope: PublicationScope, raw: unknown)
         `The finding path ${JSON.stringify(outside)} is not a non-empty file in trusted_publication.files.`,
       );
     const decoded = yield* Schema.decodeUnknown(PublicationDecision)(
-      boundedExplanations(withNullDefaults(raw)),
+      boundedRulings(boundedExplanations(withNullDefaults(raw))),
     ).pipe(
       Effect.mapError(
         (error) =>
@@ -357,6 +377,9 @@ export const decodePublicationDecision = (scope: PublicationScope, raw: unknown)
       reason: decided.reason,
       rationale: decided.rationale,
       findings: decided.findings,
+      ...(decided.responseRulings === undefined || decided.responseRulings.length === 0
+        ? {}
+        : { responseRulings: decided.responseRulings }),
       ...(decided.excusedSignInChoices === undefined
         ? {}
         : { excusedSignInChoices: decided.excusedSignInChoices }),

@@ -206,6 +206,62 @@ export const PublicationFinding = Schema.Struct({
   route: Schema.optionalWith(RoutePointer, { exact: true, nullable: true }),
 });
 export type PublicationFinding = typeof PublicationFinding.Type;
+
+/** The characters a minter's answer to one finding may hold. */
+export const findingResponseLimit = 600;
+/** The most findings one publication request may answer. */
+export const findingResponsesLimit = 16;
+/** A finding's id as the host gives it to the minter: `f` and 10 hex digits of its digest. */
+export const findingIdPattern = /^f[0-9a-f]{10}$/;
+
+/**
+ * The minter's answer to one finding of the publication review that denied its last submission:
+ * the finding by the id the host gave it, why the minter holds the finding wrong or no longer
+ * applying, and where the evidence is. It is the minter's own claim, carried to the next review
+ * as untrusted data, which Guardian rules on (`ResponseRuling`); never authority.
+ */
+export const FindingResponse = Schema.Struct({
+  finding: Schema.String.pipe(Schema.pattern(findingIdPattern)).annotations({
+    description: "The finding's id, exactly as the not_published result gave it",
+  }),
+  response: Schema.String.pipe(
+    Schema.pattern(/\S/),
+    Schema.maxLength(findingResponseLimit),
+  ).annotations({
+    description:
+      "Why the finding is wrong or no longer applies under the review's rules, in one to three sentences, such as a value the site never shows on that page",
+  }),
+  evidence: Schema.optional(
+    Schema.Struct({
+      caseId: Schema.optional(
+        Schema.String.pipe(Schema.pattern(/^[A-Za-z0-9_.:-]{1,100}$/)).annotations({
+          description: "A live test case in publication/tests.json that shows it",
+        }),
+      ),
+      path: Schema.optional(
+        Schema.String.pipe(Schema.minLength(1), Schema.maxLength(300)).annotations({
+          description: "A file the review can read that shows it, such as a capture",
+        }),
+      ),
+    }),
+  ),
+});
+export type FindingResponse = typeof FindingResponse.Type;
+
+/** The characters Guardian's reason for one ruling may hold; the host cuts a longer one. */
+export const rulingReasonLimit = 500;
+/**
+ * Guardian's ruling on one minter answer to a prior finding: `accepted` when the evidence shows
+ * the finding was wrong or no longer applies, so it is not returned again, and `rejected` when it
+ * does not, so the finding stands.
+ */
+export const ResponseRuling = Schema.Struct({
+  finding: Schema.String,
+  ruling: Schema.Literal("accepted", "rejected"),
+  reason: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(rulingReasonLimit)),
+});
+export type ResponseRuling = typeof ResponseRuling.Type;
+
 export const PublicationReason = Schema.Literal(...publicationReasons);
 export type PublicationReason = typeof PublicationReason.Type;
 

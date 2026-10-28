@@ -263,6 +263,13 @@ A `not_published` result says why in `reason` and, for most reasons, what to do 
 | `reason`                   | `missing_receipt`, `receipt_incomplete`<!-- pomerado:section publication.protected-result -->, `wrong_execution_purpose`                                         | The `executionId` names no completed example or confirming act step                | Call again with the `executionId` of the completed read example or the write step that confirmed it                                                                                                                                                                                          |<!-- pomerado:section publication.screening-rejections -->
 | `diagnostic.review.reason` | `privacy`, `source_correction`, `unsupported_claim`, `authority`, `evidence`                                                           | Guardian's review blocked it                                                       | Each finding names a published file (`path`, and `file` as your workspace names it), a UTF-8 byte range (`byteStart`, `byteEnd`) and a `category`, and its `explanation` says what is wrong, the evidence and the fix. Fix every finding in source or metadata, then call again with the same `executionId`. For a host-owned file, see the check list |
 
+Each finding also has an `id`. When you hold a finding wrong, or no longer applying, under the
+review's rules, answer it rather than resubmitting unchanged: call `finish_build` again with
+`findingResponses`, one entry per finding you answer, each with its `id`, a short `response` and
+`evidence` that shows it, a live test `caseId` or a file the review reads, such as a capture.
+Guardian rules on each answer in the next review, and a denial returns its `responseRulings`. An
+answer never replaces a live run or capture a finding asks for: run it instead.
+
 Any other reason: read `diagnostic` and the instruction; the existing example stays recorded.
 
 Finding categories: `private_literal`, `credential` and `customer_data` are private values in a
