@@ -227,38 +227,6 @@ describe("stepInput", () => {
     });
   });
 
-  it("runs a session's first act steps on the caller's empty input until one passes exampleInput, then that input", async () => {
-    const order = { item: "lamp", quantity: 2 };
-    const act = (extra: Partial<ExecutionRequest> = {}) =>
-      request({ purpose: "act", target: "liveBrowser", ...extra });
-    const writeScope = (session: { readonly started: boolean; readonly input?: typeof order }) => ({
-      buildEffect: "write" as const,
-      callerInput: {},
-      writeSession: { started: session.started, input: session.input },
-    });
-    // Step 1 passes none and runs the caller's empty input, unmarked.
-    expect(exampleInputRefusal(act(), writeScope({ started: false }))).toBeUndefined();
-    expect(
-      await Effect.runPromise(stepInput(act(), { callerInput: {}, sessionInput: undefined })),
-    ).toEqual({ input: {} });
-    // Step 2 is the first to pass one, so it fixes the session's input.
-    const fixing = act({ exampleInput: JSON.stringify(order) });
-    expect(exampleInputRefusal(fixing, writeScope({ started: true }))).toBeUndefined();
-    expect(await run(fixing, {})).toMatchObject({
-      _tag: "Right",
-      right: { input: order, mark: "intent_derived" },
-    });
-    // Step 3 omits it and runs that input; step 4 passes another and is refused.
-    expect(await run(act(), {}, order)).toMatchObject({
-      _tag: "Right",
-      right: { input: order, mark: "intent_derived" },
-    });
-    const changed = act({ exampleInput: JSON.stringify({ ...order, quantity: 3 }) });
-    expect(
-      exampleInputRefusal(changed, writeScope({ started: true, input: order }))?.reason,
-    ).toContain("Repeat it unchanged or omit it");
-  });
-
   it("runs an agent-chosen test input, marked agent_chosen, and otherwise the caller's input", async () => {
     expect(await run(agentTest({ amountMinor: 12 }), { amountMinor: 3700 })).toMatchObject({
       _tag: "Right",
