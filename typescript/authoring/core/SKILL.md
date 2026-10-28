@@ -116,10 +116,10 @@ pomerado:section core.execute-calls:end -->
   separate challenge probe or call on every pass of a polling loop of your own, and never wait out
   a timeout and swallow it to probe for a challenge.
 - When the site answers a 429 or another block of that kind partway through a read-only tool's
-  read, such as its bot protection answering 403 or an access-denied page, or
-  `waitPastChallenge` throws there, prefer letting the call fail over retrying or looping inside
-  the tool, or over returning the rows read so far: a host may give a blocked read another
-  browser or one rerun, and only a failed call reaches it.
+  read, such as its bot protection answering 403 with an access-denied page rather than a
+  challenge, or `waitPastChallenge` throws there, prefer letting the call fail over retrying or
+  looping inside the tool, or over returning the rows read so far: a host may give a blocked
+  read another browser or one rerun, and only a failed call reaches it.
 - Never repeat a call that may have run.
 - When the site itself refuses a caller's value, such as a past date, an unknown airport code
   or a party size over its limit, throw `new errors.InvalidInput(message, { field })` saying why,
