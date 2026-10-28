@@ -171,6 +171,9 @@ or listing page, which a details tool takes as input and opens directly. A stabl
 route the site itself uses may be opened from the caller's identifier when it is clearly better
 than the controls, such as a record page at `/items/<id>` instead of crawling a directory.
 Either way, read the page's identity back from the page and fail if it does not match.
+Of the site's own routes, prefer the fastest to what the caller asked for, since callers wait on
+every step: reach a record the caller named through the site's search, or an identifier route as
+above, rather than walking a directory, sitemap or broad result list until it turns up.
 
 When the controls flow lands on a URL the site produced, and two runs with different inputs show
 which parts of it carry which input, such as the query, dates, guests or party size, sort or a
