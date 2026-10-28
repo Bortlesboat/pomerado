@@ -107,6 +107,26 @@ describe("rankChoices", () => {
     });
   });
 
+  test("a name holding every word of the value in another order matches after whole words", () => {
+    const stations = [choice("Seattle, WA - King Street Station (SEA)"), choice("Seattle, WA - Tukwila Station (TUK)")];
+    expect(rank(stations, "Seattle King Street")).toEqual({ status: "picked", index: 0, rank: "allWords" });
+    const addresses = [choice("12 Main St, Springfield, IL 62701"), choice("120 Main St, Springfield, IL 62701")];
+    expect(rank(addresses, "12 Main St 62701")).toEqual({ status: "picked", index: 0, rank: "allWords" });
+    // A name holding the value as written, or as whole words in order, still wins.
+    expect(rank([choice("King Street Seattle"), choice("Seattle King Street Station")], "Seattle King Street")).toEqual({
+      status: "picked",
+      index: 1,
+      rank: "words",
+    });
+    // Every word must show; two names holding them all tie.
+    expect(rank(stations, "Seattle Union Station")).toEqual({ status: "missing" });
+    expect(rank([choice("Main St 12, Springfield"), choice("St Main 12, Shelbyville")], "12 Main St")).toEqual({
+      status: "ambiguous",
+      indexes: [0, 1],
+      rank: "allWords",
+    });
+  });
+
   test("an empty or blank value matches nothing", () => {
     expect(rank([choice("Anything"), choice("")], "")).toEqual({ status: "missing" });
     expect(rank([choice("Anything")], "   ")).toEqual({ status: "missing" });

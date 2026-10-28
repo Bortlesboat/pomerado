@@ -520,8 +520,9 @@ const pickerPageCode = String.raw`(element, args) => {
  * Matching (see `rankChoices`): a name or value as written, then ignoring case and spacing, then
  * accents and punctuation, then, only for `pickValue` with `tie: "first"`, a name whose text
  * before its first comma (not one between digits) is the value, ignoring the same (rank `leading`:
- * York, UK for York), then a name holding the value as whole words (New York for York), then,
- * only with `options.stem` set to true (as a read sets it; `pickValues` takes it too), a name with
+ * York, UK for York), then a name holding the value as whole words (New York for York), then a
+ * name holding every word of the value in any order (rank `allWords`: Seattle, WA - King Street
+ * Station for Seattle King Street), then, only with `options.stem` set to true (as a read sets it; `pickValues` takes it too), a name with
  * as many words as the value whose words each equal the value's in order or, for words of Latin
  * letters only, begin the value's or begin with them, the shorter of five or more letters, such as
  * Dentistry for Dentist (rank `stem`). An option's names are its text, first line, accessible name,
@@ -1353,7 +1354,7 @@ const pickValues = async (control, values, options = {}) => {
         let found = await pickerFind(s, wanted);
         // A free-entry value is created rather than replaced by a suggestion that only holds it
         // or shares its stem.
-        if (options.create && found.status === "picked" && ["leading", "words", "stem"].includes(found.rank))
+        if (options.create && found.status === "picked" && ["leading", "words", "allWords", "stem"].includes(found.rank))
           found = { status: "refused", field: found.field, refusal: { picked: false, reason: "option_missing", wanted: wanted[0], available: [], matches: [] } };
         const since = pickerMark(s);
         const showsChip = (label) => async () => {

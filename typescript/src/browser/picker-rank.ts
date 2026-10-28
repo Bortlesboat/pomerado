@@ -10,7 +10,7 @@ export interface PickerChoice {
 }
 
 /** How closely the winning option matched, best first. */
-export const pickerRanks = ["exact", "normalized", "folded", "leading", "words", "stem"] as const;
+export const pickerRanks = ["exact", "normalized", "folded", "leading", "words", "allWords", "stem"] as const;
 export type PickerRank = (typeof pickerRanks)[number];
 
 export type PickerRanking =
@@ -29,7 +29,9 @@ export type PickerRanking =
  * punctuation (`fold`), then, only with `options.leading`, a name whose leading part, its text
  * before its first comma that is not between two digits, is a spelling, folded the same way
  * (`leading`: York, UK for York, but not 1,000 miles for 1), then a name holding a spelling as
- * whole words (New York for York), then, only with `options.stem`, a name whose words pair one
+ * whole words (New York for York), then a name holding every word of a spelling, in any order,
+ * among its own (`allWords`: Seattle, WA - King Street Station for Seattle King Street, or 12 Main
+ * St, Springfield 62701 for 12 Main St 62701), then, only with `options.stem`, a name whose words pair one
  * for one, in order, with a spelling's (`stem`), as a read asks for and a write never does. Two
  * words pair when they are equal, or when both are Latin letters only and the shorter, of five or
  * more letters, is the whole start of the longer, such as Dentist and Dentistry or Dentists and
@@ -98,6 +100,16 @@ export const rankChoices = (
       (choice) => {
         const parts = spellings.map(phrase).filter((part) => part.trim() !== "");
         return choice.names.some((name) => parts.some((part) => phrase(name).includes(part)));
+      },
+    ],
+    [
+      "allWords",
+      (choice) => {
+        const wants = spellings.map(words).filter((list) => list.length > 0);
+        return choice.names.some((name) => {
+          const have = new Set(words(name));
+          return wants.some((want) => want.every((word) => have.has(word)));
+        });
       },
     ],
     [
