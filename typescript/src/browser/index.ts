@@ -58,10 +58,10 @@ export type { ConditionObservation, ConditionState, Dispatch } from "../runtime/
 export { CalendarDate, formControlsCode } from "./form-controls.js";
 export { outcomeWaitCode } from "./outcome-wait.js";
 export { PickManyOutcome, PickOutcome, pickRefusal, pickerCode } from "./picker.js";
-export { pickerRanks, rankChoices } from "./picker-rank.js";
+export { closestFirst, pickerRanks, rankChoices } from "./picker-rank.js";
 export type { PickerChoice, PickerRank, PickerRanking } from "./picker-rank.js";
 export { visibleTextCode } from "./visible-text.js";
-export { normalizeText, rankByWords, readBackMatches, sameText } from "../runtime/text.js";
+export { normalizeText, rankByWords, readBackMatches, sameText, spellingsOf } from "../runtime/text.js";
 export { saveAndReadBack } from "../runtime/save-read-back.js";
 export type { SavedValueDifference } from "../runtime/save-read-back.js";
 export { confirmCommitCode, waitCode } from "./wait.js";

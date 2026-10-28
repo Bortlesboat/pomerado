@@ -79,22 +79,38 @@ test("pickValue picks a native select's option by label, value or another spelli
   });
 });
 
-// A list that writes the wanted town short is refused, never picked without a word.
-test("pickValue refuses a town the list writes short", async ({ page }) => {
+// A town the list writes in one of the usual other forms, such as St for Saint, is picked; one it
+// writes short in any other way is refused, never picked without a word.
+test("pickValue picks a town the list writes with a usual short form and refuses any other short form", async ({ page }) => {
   await serve(page, `<form><label>Town <select name="town">
-<option value="">Choose a town</option><option value="1">St-Exemple-sur-Lac</option></select></label></form>`);
+<option value="">Choose a town</option><option value="1">St-Exemple-sur-Lac</option><option value="2">Pte-Exemple</option></select></label></form>`);
   expect(
     await call(page, `return await pickValue(page.getByLabel("Town"), "Saint-Exemple-sur-Lac", fast);`),
-  ).toEqual({
+  ).toMatchObject({ result: { picked: true, label: "St-Exemple-sur-Lac", value: "1" } });
+  expect(await call(page, `return await pickValue(page.getByLabel("Town"), "Pointe-Exemple", fast);`)).toEqual({
     result: {
       picked: false,
       reason: "option_missing",
-      wanted: "Saint-Exemple-sur-Lac",
-      available: ["St-Exemple-sur-Lac"],
+      wanted: "Pointe-Exemple",
+      available: ["Pte-Exemple", "St-Exemple-sur-Lac"],
       matches: [],
     },
   });
-  expect(await submitted(page)).toEqual({ town: "" });
+  expect(await submitted(page)).toEqual({ town: "1" });
+});
+
+// A value the list lacks lists the options closest to it first, so the nearest ones survive the cap
+// of 100 on a long list.
+test("pickValue lists the options closest to a missing value first, within its cap", async ({ page }) => {
+  const stores = Array.from({ length: 120 }, (_, index) => `<option value="${index + 1}">Store ${String(index + 1).padStart(3, "0")}</option>`).join("");
+  await serve(page, `<form><label>Store <select name="store"><option value="">Choose a store</option>${stores}
+<option value="near">Example Fifth Plaza</option></select></label></form>`);
+  const refused = (await call(page, `return await pickValue(page.getByLabel("Store"), "Example Fifth Mall", fast);`)) as {
+    readonly result: { readonly reason: string; readonly available: readonly string[] };
+  };
+  expect(refused.result.reason).toBe("option_missing");
+  expect(refused.result.available[0]).toBe("Example Fifth Plaza");
+  expect(refused.result.available).toHaveLength(100);
 });
 
 test("pickValue prefers an exact match and reports options that tie once case is ignored", async ({ page }) => {
