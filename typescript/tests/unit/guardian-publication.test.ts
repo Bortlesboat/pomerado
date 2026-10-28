@@ -1017,8 +1017,30 @@ describe("the publication policy", () => {
   it("leaves a site's own Remember me choice at its default in both reviews", () => {
     const rule =
       "Prefer leaving a site's own \"Remember me\" or \"Keep me signed in\" choice at its default on the tool's own sign-in. It keeps the account owner's session, which later runs rely on, and it is not a safety default. Never deny the host's own sign-in step over that choice.";
+    expect(publicationSafetyDefaultPolicy).toContain(` ${rule} `);
+    expect(guardianExecutionPolicy(nativeExecutionEnvironment)).toContain(`\n${rule} `);
+  });
+
+  // A sign-in box the site pre-ticked to remember the email and sign-in method on this device was
+  // read as another lasting preference: Guardian held the host's sign-in over it, the owner had it
+  // unticked, and the saved sign-in recipe, which cannot set a box, was refused at publication
+  // after the write was done. Such a box is the site's own Remember me choice, whatever its words.
+  it("takes a box that remembers the sign-in on this device as the site's own Remember me choice", () => {
+    const rule =
+      "Never deny the host's own sign-in step over that choice. A sign-in form's box that remembers the email, username or sign-in method on this device, or keeps the session signed in, is the site's own Remember me choice, whatever its wording: prefer leaving it as the page set it on the tool's own sign-in, and neither escalate nor deny the host's sign-in step or its saved sign-in recipe over it, unless trusted intent names that box.";
     expect(publicationSafetyDefaultPolicy.endsWith(` ${rule}`)).toBe(true);
-    expect(guardianExecutionPolicy(nativeExecutionEnvironment)).toContain(`\n${rule}\n`);
+    // An agent's own step that changes such a box still needs the sign-in screen rule's authority,
+    // and trusted intent that names the box still governs it.
+    const execution = guardianExecutionPolicy(nativeExecutionEnvironment);
+    expect(execution).toContain(
+      ` ${rule} An agent's own step that changes such a box still follows the sign-in screen rule above.\n`,
+    );
+    expect(execution).toContain(
+      "Select a remember-device, trust-this-device or keep-me-signed-in control on the sign-in screen when trusted intent or an answer in trusted_authority.answeredQuestions authorizes it,",
+    );
+    expect(execution.indexOf("Select a remember-device, trust-this-device")).toBeLessThan(
+      execution.indexOf("An agent's own step that changes such a box"),
+    );
   });
 
   // An edit that drops a tool's unchecking of a preselected partner comparison box is not a fix,
