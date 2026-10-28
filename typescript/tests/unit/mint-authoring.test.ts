@@ -1246,6 +1246,13 @@ it("has a write ask for a code the site sends during it from its act step, not t
     "A `request_input` or script secret question for a code is only for a code that is not part of signing in: another code a later protected action after sign-in asks for, or a code the site sends during a write, signed out too (writes skill); `authenticate` is never started just for such a code.",
   );
   expect(text("auth")).not.toContain("is only for a later protected action after sign-in");
+  // The caller-input skill's list of codes to ask for, and its secret question type, agree.
+  expect(text("caller-input")).toContain(
+    "- a code that is not part of signing in: another code the site sends to confirm a protected action after sign-in, or a code the site sends during a write, signed out too (writes skill), such as a confirmation code by text or email, never a code that is part of signing in (auth skill);",
+  );
+  expect(text("caller-input")).toContain(
+    "a code the site sent that is not part of signing in, to confirm an action after sign-in or during a write, signed out too (`one_time_code`; a code that is part of signing in is a `code` field of the `authenticate` step, never a question)",
+  );
   // Unchanged: a code that is part of signing in is the sign-in's own code field.
   expect(text("auth")).toContain(
     "A code the site sends as part of signing in, by text message, email or an authenticator app, is part of the sign-in: map its screen as a `signInStep` with a `code` field and let `authenticate` get the code, which the host fills or asks the caller for. Never ask for it separately with `request_input`.",
@@ -1295,7 +1302,7 @@ it("renders the pinned standalone authoring", async () => {
     ["4d05ffc26a395fafb591bb8ac593b79ae7450f21f26ac8709cbbe543fc2453df", "forms"],
     ["84e148c4a1303c3f955742e50bc046a3ade624def1a91f5ed3fb70de3d0b3c8e", "writes"],
     ["d06f650fc09f74d3711e043da2303de97ced42c9ff2541d48ec28cd7e686519d", "cart"],
-    ["14ec800f1f19a16e1a94c11e8a4e869e798bf597d86cd2369a51d32d66c9bc94", "caller-input"],
+    ["1f29e8390f1b07d9b50d261f81aa1bc7b745f9e75acb72fafec3de718f310a25", "caller-input"],
     ["fb7cd6b0929612a94dd6e0a3c54fa42e102ada77ccd83059fe818a01d8307cf0", "publication"],
     ["e6a91d90cd515385aa8a7073a5435ac00a4f2dbaaa045cffd3b290e9b497dc91", "workspace/AGENTS.md"],
     ["9501ae9c273d5d4db8976a544879f7aee44212c8a616b00e74263dcd3c593035", "workspace/README.md"],
