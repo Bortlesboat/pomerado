@@ -486,6 +486,14 @@ export interface PendingExecution {
     };
     readonly browser: "not_opened" | "active" | "closed" | "unavailable";
     /**
+     * Host fact, for execution and publication reviews: `signed_out` when the job holds no saved
+     * login and no host sign-in step ran in this attempt, so the session is established signed out;
+     * `signed_in` when the job holds a login or a host sign-in ran. A host that cannot tell leaves
+     * it out, and the review infers the session from the task and the steps as before. A host
+     * never sends `signed_out` for a job that holds a login.
+     */
+    readonly session?: "signed_out" | "signed_in";
+    /**
      * Host fact, present only while no sign-in in this attempt is verified: the `{{secret.<id>}}`
      * handles answering a one-time or authenticator code question the agent asked after an
      * authenticate step of this attempt and before any verified sign-in, the code the site sent

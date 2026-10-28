@@ -14,9 +14,9 @@
  * that only resembles code, the minter names its path and check with the reason as an override,
  * and the reviewer sees both.
  *
- * `lintSchemas` adds two advisory checks of the declared schemas rather than the values
- * (`loose_text`, `looser_than_input`). `lintOutput` never reports them, so a run's checks and
- * telemetry stay as they were.
+ * `lintSchemas` adds advisory checks of the declared schemas rather than the values
+ * (`loose_text`, `looser_than_input`, `unheld_format`). `lintOutput` never reports them, so a
+ * run's checks and telemetry stay as they were.
  */
 
 export const outputChecks = [
@@ -38,6 +38,7 @@ export const outputChecks = [
   "case_variant",
   "loose_text",
   "looser_than_input",
+  "unheld_format",
 ] as const;
 export type OutputCheck = (typeof outputChecks)[number];
 
@@ -312,6 +313,45 @@ const expandControl =
 const isoDate = /^\d{4}-\d{2}-\d{2}$/u;
 const isoDateTime =
   /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:[Zz]|[+-]\d{2}:?\d{2})$/u;
+/**
+ * The notations a field's description can promise, each with the values written in it: a date as
+ * `YYYY-MM-DD`, ISO 8601 (a date, a timestamp with its offset, a time of day, a month or a
+ * duration) and an ISO 4217 currency code. A field named for a currency, such as `currency` or
+ * `price_currency`, promises a code too.
+ */
+const isoTime = /^\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:[Zz]|[+-]\d{2}:?\d{2})?$/u;
+const isoMonth = /^\d{4}-\d{2}$/u;
+const isoDuration =
+  /^P(?=\d|T\d)(?:\d+Y)?(?:\d+M)?(?:\d+W)?(?:\d+D)?(?:T(?=\d)(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?$/u;
+const currencyCode = /^[A-Z]{3}$/u;
+const notations: readonly { readonly named: RegExp; readonly holds: (text: string) => boolean }[] = [
+  // `YYYY-MM-DD` alone; `YYYY-MM-DDTHH:MM` names a timestamp.
+  { named: /YYYY-MM-DD(?![A-Za-z0-9])/u, holds: (text) => isoDate.test(text) },
+  {
+    named: /\bISO[\s-]?8601\b|YYYY-MM-DDT/iu,
+    holds: (text) =>
+      [isoDate, isoDateTime, isoTime, isoMonth, isoDuration].some((form) => form.test(text)),
+  },
+  { named: /\bISO[\s-]?4217\b/iu, holds: (text) => currencyCode.test(text) },
+];
+const currencyName = /^(?:currency(?:_?code)?|[a-z][a-z0-9_]*_currency(?:_code)?|[a-z][a-zA-Z0-9]*Currency(?:Code)?)$/u;
+/** The notations `description` names, and a currency code for a field `key` names a currency. */
+const promisedNotations = (description: unknown, key: string | undefined) => [
+  ...(typeof description === "string"
+    ? notations.filter((notation) => notation.named.test(description))
+    : []),
+  ...(key !== undefined && currencyName.test(key)
+    ? [{ named: currencyName, holds: (text: string) => currencyCode.test(text) }]
+    : []),
+];
+/** A field's own name, from a path `lintOutput` names: `currency` in `rows[].currency`. */
+const keyOfPath = (path: string) => /([^.[\]]+)(?:\[\])*$/u.exec(path)?.[1];
+/**
+ * A field that holds the site's own wording beside a typed one, such as `date_label` beside
+ * `date`, whose description may name the typed field's notation without promising it.
+ */
+const siteWordingKey = /(?:_(?:label|text|display)|(?:Label|Text|Display))$/u;
+
 /** The longest value compared for `case_variant`: a status, tag or label, never prose. */
 const caseVariantLength = 40;
 
@@ -392,16 +432,20 @@ export const controlLabelsFromAriaSnapshot = (snapshot: string): string[] => {
 const isExpandControl = (label: string) =>
   label.length >= 2 && label.length <= 40 && expandControl.test(normalizedLabel(label));
 
-/** The JSON Schema node for a path's value, following properties, items, local refs and unions. */
+/**
+ * The JSON Schema node for a path's value, following properties, items, local refs and unions. A
+ * keyword beside a local ref, such as the field's own description, wins over the ref's.
+ */
 const schemaResolver = (root: unknown) => {
   const resolve = (node: unknown, depth = 0): Json | undefined => {
     if (!isRecord(node) || depth > 16) return undefined;
-    const reference = node["$ref"];
+    const { $ref: reference, ...beside } = node;
     if (typeof reference === "string" && reference.startsWith("#/")) {
       let target: unknown = root;
       for (const part of reference.slice(2).split("/"))
         target = isRecord(target) ? target[part.replace(/~1/gu, "/").replace(/~0/gu, "~")] : undefined;
-      return resolve(target, depth + 1);
+      const resolved = resolve(target, depth + 1);
+      return resolved === undefined ? undefined : { ...resolved, ...beside };
     }
     return node;
   };
@@ -579,9 +623,16 @@ export const lintOutput = (output: unknown, options: OutputLintOptions = {}): Ou
     if (text.length > (allowedLength ?? (inRow ? longRowValue : longValue)))
       flag(path, "too_long", text);
     const format = schema.annotation(node, "format");
+    // A value in another notation than its field declares, by its format or in its description.
+    const key = keyOfPath(path);
+    const promised =
+      key !== undefined && siteWordingKey.test(key)
+        ? []
+        : promisedNotations(schema.annotation(node, "description"), key);
     if (
       (format === "date" && !isoDate.test(text)) ||
-      (format === "date-time" && !isoDateTime.test(text))
+      (format === "date-time" && !isoDateTime.test(text)) ||
+      (promised.length > 0 && !promised.some((notation) => notation.holds(text)))
     )
       flag(path, "format_mismatch", text);
     // A card_text section is a card's whole text, its controls included. An ending ellipsis
@@ -799,6 +850,8 @@ interface SchemaShape {
   readonly patterns: readonly string[];
   readonly enum: readonly unknown[] | undefined;
   readonly format: boolean;
+  /** The descriptions the node and the nodes merged into it give. */
+  readonly descriptions: readonly string[];
   readonly properties: ReadonlyMap<string, readonly unknown[]>;
   readonly required: ReadonlySet<string>;
   readonly items: readonly unknown[];
@@ -828,6 +881,7 @@ const ownShape = (node: Json): SchemaShape => {
     patterns: typeof node["pattern"] === "string" ? [node["pattern"]] : [],
     enum: values,
     format: typeof node["format"] === "string",
+    descriptions: typeof node["description"] === "string" ? [node["description"]] : [],
     properties: new Map(
       Object.entries(isRecord(node["properties"]) ? node["properties"] : {}).map(
         ([key, child]) => [key, [child]] as const,
@@ -867,6 +921,7 @@ const bothShapes = (left: SchemaShape, right: SchemaShape): SchemaShape => {
           ? left.enum
           : left.enum.filter((value) => right.enum?.includes(value)),
     format: left.format || right.format,
+    descriptions: [...left.descriptions, ...right.descriptions],
     properties,
     required: new Set([...left.required, ...right.required]),
     items: [...left.items, ...right.items],
@@ -1025,6 +1080,23 @@ const blankTexts = ["", " ", "\t", "\n"];
 const textField = (field: DeclaredField) =>
   field.shapes.length > 0 && field.shapes.every(isStringShape);
 
+/** A pattern that holds a format, such as a date or a code: one that refuses plain words. */
+const holdsFormat = (pattern: string) => compiledPattern(pattern)?.test(freeText) === false;
+
+/**
+ * Whether a text field promises a notation, in its description or by a currency's name, that no
+ * format, enum or format-holding pattern of its declared schema holds.
+ */
+const unheldFormat = (field: DeclaredField) =>
+  textField(field) &&
+  (field.key === undefined || !siteWordingKey.test(field.key)) &&
+  field.shapes.some(
+    (shape) => promisedNotations(shape.descriptions.join(" "), field.key).length > 0,
+  ) &&
+  !field.shapes.every(
+    (shape) => shape.format || shape.enum !== undefined || shape.patterns.some(holdsFormat),
+  );
+
 /** How `output` is looser than `input`, the input field of the same name. */
 const looserThan = (output: DeclaredField, input: DeclaredField) => {
   if (input.required && !input.nullable && (!output.required || output.nullable)) return true;
@@ -1042,9 +1114,7 @@ const looserThan = (output: DeclaredField, input: DeclaredField) => {
     return true;
   // Only a pattern that holds a format, such as a date or a code, must carry over: one that
   // takes plain words, such as one refusing whitespace alone, leaves the field free text.
-  const inputPatterns = input.shapes.map((shape) =>
-    shape.patterns.filter((pattern) => compiledPattern(pattern)?.test(freeText) === false),
-  );
+  const inputPatterns = input.shapes.map((shape) => shape.patterns.filter(holdsFormat));
   if (
     inputValues === undefined &&
     inputPatterns.every((patterns) => patterns.length > 0) &&
@@ -1067,8 +1137,10 @@ const looserThan = (output: DeclaredField, input: DeclaredField) => {
  * found by property name at any depth when only one input field has it: an enum dropped or
  * widened, a format's pattern (one that refuses plain words) neither repeated nor replaced by an
  * enum, a smaller minLength, or optional
- * or nullable where the input is required. Neither blocks: whether a field holds a needed value
- * is the publication review's judgment.
+ * or nullable where the input is required. `unheld_format`: a text field whose description names
+ * a notation (`YYYY-MM-DD`, ISO 8601 or ISO 4217), or whose name is a currency's, that no format,
+ * enum or pattern refusing plain words holds, so a value in another notation still decodes. None
+ * blocks: whether a field holds a needed value is the publication review's judgment.
  */
 export const lintSchemas = (inputSchema: unknown, outputSchema: unknown): OutputFinding[] => {
   const inputs = new Map<string, DeclaredField | undefined>();
@@ -1088,6 +1160,7 @@ export const lintSchemas = (inputSchema: unknown, outputSchema: unknown): Output
       flag(field.path, "loose_text");
     const input = field.key === undefined ? undefined : inputs.get(field.key);
     if (input !== undefined && looserThan(field, input)) flag(field.path, "looser_than_input");
+    if (unheldFormat(field)) flag(field.path, "unheld_format");
   }
   return [...findings.values()];
 };
@@ -1139,11 +1212,13 @@ export const outputCheckMeaning: Readonly<Record<OutputCheck, string>> = {
   loose_text:
     "is a required string whose declared schema accepts an empty string or whitespace alone",
   format_mismatch:
-    "is not in the form its field declares: a format date that is not YYYY-MM-DD, such as a timestamp or the site's own wording, or a format date-time that is not ISO 8601 with an offset",
+    "is not in the form its field declares: a format date that is not YYYY-MM-DD, such as a timestamp or the site's own wording, a format date-time that is not ISO 8601 with an offset, a value in another notation than its description names (YYYY-MM-DD, ISO 8601 or ISO 4217), or a currency field that is not a three-letter ISO 4217 code",
   case_variant:
     "holds one value in two letter cases across the list, such as paid and Paid, so callers cannot compare it",
   looser_than_input:
     "is declared looser than the input field of the same name: its enum or format pattern dropped, a smaller minLength, or optional or nullable where the input is required",
+  unheld_format:
+    "promises a notation, in its description (YYYY-MM-DD, ISO 8601 or ISO 4217) or as a currency field, that its declared schema does not hold with a pattern, format or enum, so a value in another notation still passes",
 };
 
 /**
@@ -1159,5 +1234,5 @@ export const outputChecksNotice = (findings: readonly OutputFinding[]) =>
           meaning: outputCheckMeaning[finding.check],
         })),
         instruction:
-          "The host checked every value this run returned. Check each finding against the page. Fix a wrong value at the read in source: read rendered text with visibleText, visibleTexts or readRows, expand collapsed text before reading it and read it back, and scope rows to the main list; never clean a string afterwards. A repeated item ID is often a sponsored copy of an organic result: first check whether the rows are variants or line items that share an ID on purpose, and return a copy once only when it is the same item (pagination skill). A field empty in every record of every tested run was usually read from a collapsed section or a guessed key: check it against a record whose page shows it, then read it from the page's embedded record data or the opened section, or remove it. A check can be wrong: when a value is correct as it is, such as code the tool is meant to return or the page's own text that only resembles code, name its path and check with the reason in finish_build's outputOverrides. A field that holds code or markup on purpose can declare its contentMediaType instead; its findings then name that type and never block. Blocking findings (script, css, markup, template_residue) refuse finish_build until fixed or overridden; the others never block. format_mismatch and case_variant name a value in another notation than its field promises: convert it in code to the declared form, a date as YYYY-MM-DD, a timestamp as ISO 8601 with an offset, an enum value in lowercase snake_case with the site's wording in a separate *_label field, unless the request states another notation, which an override then names. loose_text and looser_than_input judge the declared schema, not a value: type a needed value's field as strictly as the core skill says, and keep a field loose only where the page may genuinely not show its value. The publication reviewer reads every finding and every override with its reason.",
+          "The host checked every value this run returned. Check each finding against the page. Fix a wrong value at the read in source: read rendered text with visibleText, visibleTexts or readRows, expand collapsed text before reading it and read it back, and scope rows to the main list; never clean a string afterwards. A repeated item ID is often a sponsored copy of an organic result: first check whether the rows are variants or line items that share an ID on purpose, and return a copy once only when it is the same item (pagination skill). A field empty in every record of every tested run was usually read from a collapsed section or a guessed key: check it against a record whose page shows it, then read it from the page's embedded record data or the opened section, or remove it. A check can be wrong: when a value is correct as it is, such as code the tool is meant to return or the page's own text that only resembles code, name its path and check with the reason in finish_build's outputOverrides. A field that holds code or markup on purpose can declare its contentMediaType instead; its findings then name that type and never block. Blocking findings (script, css, markup, template_residue) refuse finish_build until fixed or overridden; the others never block. format_mismatch and case_variant name a value in another notation than its field promises: convert it in code to the declared form, a date as YYYY-MM-DD, a timestamp as ISO 8601 with an offset, a currency as its ISO 4217 code, an enum value in lowercase snake_case with the site's wording in a separate *_label field, unless the request states another notation, which an override then names. unheld_format names a field whose description promises a notation its schema does not hold: give it the pattern of that notation, such as Schema.pattern(/^\\d{4}-\\d{2}-\\d{2}$/u) for a date, or a Literal enum. loose_text, looser_than_input and unheld_format judge the declared schema, not a value: type a needed value's field as strictly as the core skill says, and keep a field loose only where the page may genuinely not show its value. The publication reviewer reads every finding and every override with its reason.",
       };

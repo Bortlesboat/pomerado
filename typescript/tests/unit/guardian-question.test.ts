@@ -234,7 +234,7 @@ it("allows a blocked report that names the caller input at fault and why", async
     ),
   );
   expect(reviewPolicyOf(requests[0])).toContain(
-    'or when it asks the user for anything; the agent then revises or withdraws it. A report that starts "Caller input error:" is allowed when it names the input value at fault and why the site cannot fulfil it, in the site\'s own words where the site showed any. Saying what kind of value would work, such as a future date or a neighborhood the site lists, is part of that reason, not a request to the user. The rules below apply to questions, not to this report.\n',
+    'or when it asks the user for anything; the agent then revises or withdraws it. A report that starts "Caller input error:" is allowed when it names the input value at fault and why the site cannot fulfil it, in the site\'s own words where the site showed any. Saying what kind of value would work, such as a future date or a neighborhood the site lists, is part of that reason, not a request to the user.',
   );
 });
 
@@ -255,6 +255,24 @@ it("keeps a repair's caller-input question to invalid or real", async () => {
   );
   expect(reviewPolicyOf(requests[0])).toContain(
     "\n- without question_review.scriptAsk, the agent's own question while it builds, other than a repair's caller-input question: evidence ",
+  );
+});
+
+// A write build's one real write was done and confirmed when it found the site offers one of the
+// requested outputs by email only. Outside maintenance nothing allowed a question about publishing
+// without it, so the build ended blocked with no tool. After a confirmed write only, that question
+// is the caller's decision.
+it("allows asking, after a confirmed write, whether to publish without an output the site does not offer", async () => {
+  const requests = scripted([[message({ outcome: "allow_business", rationale: "Allowed." })]]);
+  await Effect.runPromise(
+    makeGuardian(makeOpenAIReviewer("{{ tenant_policy_config }}", false, native)).reviewQuestion(
+      pending,
+      question,
+      unreadable,
+    ),
+  );
+  expect(reviewPolicyOf(requests[0])).toContain(
+    "\n- outside maintenance, after a confirmed write (an act execution in trusted_execution_context.executions whose effect is verified), a question asking whether to publish without one requested output the site does not offer is the caller's decision, when the evidence shows the site does not offer it and its prompt names that output and says it would be null with a reason; prefer allow.\n- question_review.blockedOutcome is true:",
   );
 });
 
