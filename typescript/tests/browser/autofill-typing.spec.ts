@@ -524,6 +524,45 @@ for (const [where, pageField, reason, evidence] of [
     expectOriginsOnly(report);
   });
 
+test("a submit that also matches another form's button clicks the one in the field's own form", async ({
+  page,
+}) => {
+  const posts: { readonly path: string; readonly form: Record<string, string> }[] = [];
+  await page.route(`${site}/**`, async (route) => {
+    const request = route.request();
+    if (request.method() === "POST") {
+      posts.push({
+        path: new URL(request.url()).pathname,
+        form: Object.fromEntries(new URLSearchParams(request.postData() ?? "")),
+      });
+      await route.fulfill({ contentType: "text/html", body: "<p>Signed in</p>" });
+    } else
+      await route.fulfill({
+        contentType: "text/html",
+        body: `<form action="/session" method="post">
+<label>Password<input name="password" type="password" autocomplete="current-password"></label>
+<input type="submit" value="Sign in"></form>
+<form action="/app-sign-in" method="post"><input type="submit" value="Sign in with the app"></form>`,
+      });
+  });
+  await page.goto(`${site}/login`);
+  const step: AutofillStep = {
+    fields: [{ selector: "input[name=password]", slot: "password" }],
+    submit: "input[type=submit]",
+  };
+  const host = await hostPage(page);
+  const inspection = await Effect.runPromise(
+    inspectAutofillStep({ step, page: host, siteOrigin: site, authenticationOrigins: [] }),
+  );
+  if ("outcome" in inspection) throw new Error(`Refused: ${inspection.reason}`);
+  const { keyboard } = await hostKeyboard(page);
+  const report = await Effect.runPromise(
+    fillAutofillStep({ step, values: [password], inspection, page: host, keyboard, settleMs: 500 }),
+  );
+  expect(report).toMatchObject({ outcome: "filled", submit: "clicked" });
+  expect(posts).toEqual([{ path: "/session", form: { password } }]);
+});
+
 test("a field that hands its focus to another element is refused, naming that element", async ({
   page,
 }) => {
