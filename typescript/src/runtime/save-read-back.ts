@@ -17,14 +17,18 @@ export interface SavedValueDifference<Field extends string = string> {
  * `read` reads what the site saved for each field, from a summary, a review page or the saved
  * page, with null or no entry for a field it no longer shows, which counts as differing.
  * Each field is compared with `readBackMatches`. When one differs, it saves once more and reads
- * back again, and never saves a third time. It returns the fields that still differ, in `wanted`'s
- * order, empty when the site kept every value, so the tool stops before its final commit and
- * reports them. A save or read that throws ends it with that error.
+ * back again, and never saves a third time. `freeText` names fields of free text the caller typed,
+ * such as a name, address, city or note: when only they differ, it returns without saving again,
+ * since the tool keeps the site's version and lists it. It returns the fields that still differ,
+ * in `wanted`'s order, empty when the site kept every value, so the tool stops before its final
+ * commit on a structured value among them and lists free text in its output. A save or read that
+ * throws ends it with that error.
  */
 export const saveAndReadBack = async <Field extends string>(options: {
   readonly save: () => Promise<unknown>;
   readonly read: () => Promise<Partial<Readonly<Record<Field, string | number | null | undefined>>>>;
   readonly wanted: Readonly<Record<Field, string | number>>;
+  readonly freeText?: readonly NoInfer<Field>[];
 }): Promise<readonly SavedValueDifference<Field>[]> => {
   const differences = async (): Promise<readonly SavedValueDifference<Field>[]> => {
     const shown = await options.read();
@@ -37,7 +41,7 @@ export const saveAndReadBack = async <Field extends string>(options: {
   };
   await options.save();
   const first = await differences();
-  if (first.length === 0) return first;
+  if (first.every(({ field }) => options.freeText?.includes(field))) return first;
   await options.save();
   return differences();
 };
