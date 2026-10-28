@@ -356,8 +356,10 @@ exception: it is optional unless the task can't run without it (below).
   booleans named as statements (`refundable`, not `is_refundable_flag`); lists named in the
   plural; and the unit in the field name or its description (`duration_minutes`). Convert
   between these and the site's own formats in code. The output check flags a date or timestamp
-  not in the form its field declares (`format_mismatch`) and one value in two letter cases
-  across a list (`case_variant`).
+  not in the form its field declares, a value in another notation than its description names
+  and a currency that is not an ISO 4217 code (`format_mismatch`), a field whose description
+  promises such a notation that no `pattern` holds (`unheld_format`), and one value in two
+  letter cases across a list (`case_variant`).
 - When `reference/site-tools.json` exists, you can view the site's other tools. Read
   `reference/site-tools/README.md` first: it indexes them, one folder each, with each tool's
   effect, sign-in and a short description. Then read the folders you need: each holds a
