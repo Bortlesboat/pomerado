@@ -482,7 +482,9 @@ export const readBackMatches = (shown: string, wanted: string): boolean =>
  * as IL and Illinois, NY and New York, or DC, D.C. and Washington DC, count only where a place
  * ends the value, alone or before a postal code or country, so the word "in" or "me" inside a
  * name never reads as a state. Every form but the first is folded as `foldChoiceText` folds,
- * lower case and with `.`, `,` and hyphens between letters read as spaces. At most 32 forms.
+ * lower case and with `.`, `,` and hyphens between letters read as spaces. At most 32 forms: past
+ * that, the first words keep the value's own form and the last words' forms are kept, since a
+ * place's code, which counts only at the end, is the form a picker most often needs.
  *
  * It is pure and self-contained: the page code of `pickerCode` embeds this same function, so a
  * picker tries each form of the caller's value against the site's options.

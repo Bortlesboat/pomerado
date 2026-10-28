@@ -29,9 +29,13 @@ export type PickerRanking =
  * punctuation (`fold`), then, only with `options.leading`, a name whose leading part, its text
  * before its first comma that is not between two digits, is a spelling, folded the same way
  * (`leading`: York, UK for York, but not 1,000 miles for 1), then a name holding a spelling as
- * whole words (New York for York), then a name holding every word of a spelling, in any order,
- * among its own (`allWords`: Seattle, WA - King Street Station for Seattle King Street, or 12 Main
- * St, Springfield 62701 for 12 Main St 62701), then, only with `options.stem`, a name whose words pair one
+ * whole words (New York for York), then a name made of a spelling's words, no more and no fewer,
+ * whose parts, as its own or the spelling's commas, semicolons, colons, slashes, bars, brackets or
+ * spaced dashes separate them, come in another order, each part's words in order and the numbers
+ * in the spelling's order (`allWords`: Harbor Street Station, Example City for Example City Harbor
+ * Street Station, but never Example Fort for Fort Example, Floor 12 Room 3 for Room 12 Floor 3, or
+ * a name with a word the spelling lacks, such as Example Harbor 5th Avenue Mall for Example 5th
+ * Avenue, which may be another place than the one asked for), then, only with `options.stem`, a name whose words pair one
  * for one, in order, with a spelling's (`stem`), as a read asks for and a write never does. Two
  * words pair when they are equal, or when both are Latin letters only and the shorter, of five or
  * more letters, is the whole start of the longer, such as Dentist and Dentistry or Dentists and
@@ -43,8 +47,9 @@ export type PickerRanking =
  * `options.leading`, no option ranks `leading`; without `options.stem`, none ranks `stem`. With
  * `options.spellings`, such as `spellingsOf`, each rank also tries the other written forms of a
  * spelling against option names, never values, once the spellings as given match nothing at that
- * rank: so Fifth Avenue for 5th Avenue matches as a name before any option merely holding every
- * word, while a spelling that already matches at a rank is never overruled by one of its forms.
+ * rank: so Fifth Avenue for 5th Avenue matches as a name before any option holding the same words
+ * in another order, while a spelling that already matches at a rank is never overruled by one of
+ * its forms. Each name and each list of spellings is read once per call.
  *
  * It is pure and self-contained: the page code of `pickerCode` embeds this same function with
  * `fold` set to `foldChoiceText`.
@@ -63,6 +68,47 @@ export const rankChoices = (
   const lower = (text: string) => squash(text).toLowerCase();
   const words = (text: string) => fold(text).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   const phrase = (text: string) => " " + words(text).join(" ") + " ";
+  // Each name is read once per call, however many spellings and ranks try it.
+  const once = <T>(make: (text: string) => T) => {
+    const known = new Map<string, T>();
+    return (text: string): T => {
+      if (!known.has(text)) known.set(text, make(text));
+      return known.get(text) as T;
+    };
+  };
+  // A text's words in the parts its own commas, semicolons, colons, slashes, bars, brackets or
+  // spaced dashes separate, such as "Harbor Street Station" and "Example City" in "Harbor Street
+  // Station - Example City". A hyphen inside a word, as in St-Mary, separates nothing.
+  const parted = (text: string) => {
+    const parts = String(text ?? "")
+      .split(/[,;:|/\\()[\]{}\u2013\u2014]|\s-|-\s/u)
+      .map(words)
+      .filter((part) => part.length > 0);
+    const all = parts.flat();
+    return { parts, all, numbers: all.filter((word) => /\p{N}/u.test(word)).join(" ") };
+  };
+  // Whether `target` is `parts` laid end to end in some order, each part's words in its order.
+  const composes = (target: readonly string[], parts: readonly (readonly string[])[]) => {
+    if (parts.length < 2) return false;
+    const used = parts.map(() => false);
+    const from = (at: number): boolean =>
+      at === target.length ||
+      parts.some((part, index) => {
+        if (used[index] || !part.every((word, offset) => target[at + offset] === word)) return false;
+        used[index] = true;
+        const done = from(at + part.length);
+        used[index] = false;
+        return done;
+      });
+    return from(0);
+  };
+  const named = {
+    lower: once(lower),
+    fold: once(fold),
+    words: once(words),
+    phrase: once(phrase),
+    parted: once(parted),
+  };
   // Two words pair when they are equal, or when both are Latin letters only and the shorter, of
   // five or more letters, is the whole start of the longer.
   const latin = /^\p{Script=Latin}+$/u;
@@ -82,25 +128,34 @@ export const rankChoices = (
         .filter((form) => form !== "" && !spellings.includes(form)),
     ),
   ];
+  // What a rank reads from a list of spellings, worked out once per list rather than per option.
+  const perList = <T>(make: (list: readonly string[]) => T) => {
+    const known = new Map<readonly string[], T>();
+    return (list: readonly string[]): T => {
+      if (!known.has(list)) known.set(list, make(list));
+      return known.get(list) as T;
+    };
+  };
+  const formSets = {
+    lower: perList((list) => new Set(list.map(lower).filter((spelling) => spelling !== ""))),
+    fold: perList((list) => new Set(list.map(fold).filter((spelling) => spelling !== ""))),
+  };
+  const phrases = perList((list) => list.map(phrase).filter((part) => part.trim() !== ""));
+  const wordLists = perList((list) => list.map(words).filter((each) => each.length > 0));
+  const partLists = perList((list) => list.map(parted).filter((each) => each.all.length > 1));
   type Test = (choice: PickerChoice, list: readonly string[]) => boolean;
   const tests: readonly (readonly [PickerRank, Test, boolean])[] = [
     ["exact", (choice, list) => choice.names.some((name) => list.includes(squash(name))), true],
     ["exact", (choice, list) => choice.value !== "" && list.includes(squash(choice.value)), false],
-    ...(
-      [
-        ["normalized", lower],
-        ["folded", fold],
-      ] as const
-    ).flatMap(([rank, form]) => {
-      const forms = (list: readonly string[]) =>
-        new Set(list.map(form).filter((spelling) => spelling !== ""));
+    ...(["lower", "fold"] as const).flatMap((form) => {
+      const rank = form === "lower" ? "normalized" : "folded";
       return [
         [rank, (choice: PickerChoice, list: readonly string[]) => {
-          const set = forms(list);
-          return choice.names.some((name) => set.has(form(name)));
+          const set = formSets[form](list);
+          return choice.names.some((name) => set.has(named[form](name)));
         }, true],
         [rank, (choice: PickerChoice, list: readonly string[]) =>
-          choice.value !== "" && forms(list).has(form(choice.value)), false],
+          choice.value !== "" && formSets[form](list).has(named[form](choice.value)), false],
       ] as const;
     }),
     ...(options.leading === true
@@ -108,7 +163,7 @@ export const rankChoices = (
           [
             "leading",
             (choice: PickerChoice, list: readonly string[]) => {
-              const forms = new Set(list.map(fold).filter((spelling) => spelling !== ""));
+              const forms = formSets.fold(list);
               return choice.names.some((name) => {
                 // The first comma that is not a thousands separator, as in 1,000.
                 const comma = String(name ?? "").search(/(?<!\p{N}),|,(?!\p{N})/u);
@@ -122,18 +177,28 @@ export const rankChoices = (
     [
       "words",
       (choice, list) => {
-        const parts = list.map(phrase).filter((part) => part.trim() !== "");
-        return choice.names.some((name) => parts.some((part) => phrase(name).includes(part)));
+        const parts = phrases(list);
+        return choice.names.some((name) => {
+          const have = named.phrase(name);
+          return parts.some((part) => have.includes(part));
+        });
       },
       true,
     ],
     [
       "allWords",
+      // The same words, no more and no fewer, with the name's or the spelling's parts in another
+      // order, and the numbers in the spelling's order.
       (choice, list) => {
-        const wants = list.map(words).filter((each) => each.length > 0);
+        const wants = partLists(list);
         return choice.names.some((name) => {
-          const have = new Set(words(name));
-          return wants.some((want) => want.every((word) => have.has(word)));
+          const have = named.parted(name);
+          return wants.some(
+            (want) =>
+              want.all.length === have.all.length &&
+              want.numbers === have.numbers &&
+              (composes(want.all, have.parts) || composes(have.all, want.parts)),
+          );
         });
       },
       true,
@@ -142,9 +207,9 @@ export const rankChoices = (
       "stem",
       (choice, list) => {
         if (options.stem !== true) return false;
-        const wants = list.map(words).filter((each) => each.length > 0);
+        const wants = wordLists(list);
         return choice.names.some((name) => {
-          const have = words(name);
+          const have = named.words(name);
           return wants.some((want) => want.length === have.length && want.every((word, at) => pairs(word, have[at] ?? "")));
         });
       },

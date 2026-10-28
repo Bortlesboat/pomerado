@@ -521,8 +521,9 @@ const pickerPageCode = String.raw`(element, args) => {
  * accents and punctuation, then, only for `pickValue` with `tie: "first"`, a name whose text
  * before its first comma (not one between digits) is the value, ignoring the same (rank `leading`:
  * York, UK for York), then a name holding the value as whole words (New York for York), then a
- * name holding every word of the value in any order (rank `allWords`: Seattle, WA - King Street
- * Station for Seattle King Street), then, only with `options.stem` set to true (as a read sets it; `pickValues` takes it too), a name with
+ * name made of the value's words, no more and no fewer, with the parts its or the value's commas or
+ * spaced dashes separate in another order and the numbers in the value's order (rank `allWords`:
+ * Harbor Street Station, Example City for Example City Harbor Street Station), then, only with `options.stem` set to true (as a read sets it; `pickValues` takes it too), a name with
  * as many words as the value whose words each equal the value's in order or, for words of Latin
  * letters only, begin the value's or begin with them, the shorter of five or more letters, such as
  * Dentistry for Dentist (rank `stem`). An option's names are its text, first line, accessible name,
@@ -530,8 +531,8 @@ const pickerPageCode = String.raw`(element, args) => {
  * `data-key` or `data-code` (put others first with `options.valueAttributes`). At each rank, once
  * the value as given matches no name there, its other written forms (`spellingsOf`: 5th and Fifth,
  * St and Street or Saint, Ave and Avenue, a state's code and name where a place ends the value,
- * and the like) are tried against names, so Fifth Avenue for 5th Avenue outranks an option that
- * merely holds every word. Two options at the best rank are ambiguous; an "Add ..." or "Create
+ * and the like) are tried against names, so Fifth Avenue for 5th Avenue outranks an option with
+ * the same words in another order. Two options at the best rank are ambiguous; an "Add ..." or "Create
  * ..." row is never matched.
  *
  * Waits follow the page, never a fixed pause: after typing, the options count once no loading

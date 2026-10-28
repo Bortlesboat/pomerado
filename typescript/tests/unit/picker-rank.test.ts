@@ -109,24 +109,50 @@ describe("rankChoices", () => {
     });
   });
 
-  test("a name holding every word of the value in another order matches after whole words", () => {
-    const stations = [choice("Seattle, WA - King Street Station (SEA)"), choice("Seattle, WA - Tukwila Station (TUK)")];
-    expect(rank(stations, "Seattle King Street")).toEqual({ status: "picked", index: 0, rank: "allWords" });
-    const addresses = [choice("12 Main St, Springfield, IL 62701"), choice("120 Main St, Springfield, IL 62701")];
-    expect(rank(addresses, "12 Main St 62701")).toEqual({ status: "picked", index: 0, rank: "allWords" });
+  test("a name made of the same words with its parts in another order matches after whole words", () => {
+    const stations = [choice("Harbor Street Station, Example City"), choice("Pier Road Station, Example City")];
+    expect(rank(stations, "Example City Harbor Street Station")).toEqual({ status: "picked", index: 0, rank: "allWords" });
+    // The parts may be split by the value's own comma or dash instead of the name's.
+    expect(rank([choice("Example City Harbor Street Station")], "Harbor Street Station - Example City")).toEqual({
+      status: "picked",
+      index: 0,
+      rank: "allWords",
+    });
+    // Numbers in the same order as the value's still match.
+    expect(rank([choice("Springfield, 12 Main St 62701")], "12 Main St 62701 Springfield")).toEqual({
+      status: "picked",
+      index: 0,
+      rank: "allWords",
+    });
     // A name holding the value as written, or as whole words in order, still wins.
-    expect(rank([choice("King Street Seattle"), choice("Seattle King Street Station")], "Seattle King Street")).toEqual({
+    expect(rank([choice("Harbor Street, Example City"), choice("Example City Harbor Street Station")], "Example City Harbor Street")).toEqual({
       status: "picked",
       index: 1,
       rank: "words",
     });
-    // Every word must show; two names holding them all tie.
-    expect(rank(stations, "Seattle Union Station")).toEqual({ status: "missing" });
-    expect(rank([choice("Main St 12, Springfield"), choice("St Main 12, Shelbyville")], "12 Main St")).toEqual({
+    // Two options at that rank tie.
+    expect(rank([choice("Harbor Street, Example City", "1"), choice("Harbor Street, Example City", "2")], "Example City Harbor Street")).toEqual({
       status: "ambiguous",
       indexes: [0, 1],
       rank: "allWords",
     });
+  });
+
+  test("a name with words the value lacks, or the same words in another order within one part, is refused", () => {
+    // Extra words: the value's entity may be missing from the list, so a name that merely holds
+    // every word is a different place, store or address.
+    expect(rankForms([choice("Example Harbor 5th Avenue Mall")], "Example 5th Avenue")).toEqual({ status: "missing" });
+    expect(rankForms([choice("Exampleton Airport Oregon")], "Exampleton OR")).toEqual({ status: "missing" });
+    expect(rankForms([choice("Exampleville Station Massachusetts")], "Exampleville, MA")).toEqual({ status: "missing" });
+    expect(rankForms([choice("Example Street Station")], "St Example")).toEqual({ status: "missing" });
+    expect(rankForms([choice("Gate 12 Level 3")], "Gate 3 12")).toEqual({ status: "missing" });
+    expect(rank([choice("Example City, WA - Harbor Street Station (EXC)")], "Example City Harbor Street")).toEqual({ status: "missing" });
+    // The same words reordered inside one part name something else.
+    expect(rankForms([choice("Floor 12 Room 3")], "Room 12 Floor 3")).toEqual({ status: "missing" });
+    expect(rankForms([choice("Example Fort TX")], "Fort Example TX")).toEqual({ status: "missing" });
+    expect(rankForms([choice("Example Fort")], "Fort Example")).toEqual({ status: "missing" });
+    // Parts in another order never put the value's numbers in another order.
+    expect(rankForms([choice("Level 12, Gate 3")], "Gate 3 Level 12")).toEqual({ status: "missing" });
   });
 
   test("an empty or blank value matches nothing", () => {
@@ -147,19 +173,25 @@ describe("rankChoices other written forms", () => {
   });
 
   test("a street, avenue or saint written short or in full matches the other", () => {
-    const stations = [choice("Seattle, WA - King Street Station (SEA)"), choice("Seattle, WA - Tukwila Station (TUK)")];
-    expect(rank(stations, "Seattle King St")).toEqual({ status: "missing" });
-    expect(rankForms(stations, "Seattle King St")).toEqual({ status: "picked", index: 0, rank: "allWords" });
-    expect(rankForms([choice("North Michigan Avenue"), choice("Lake Shore Drive")], "Michigan Ave")).toEqual({
+    const stations = [choice("Harbor Street Station, Example City"), choice("Pier Road Station, Example City")];
+    expect(rank(stations, "Example City Harbor St Station")).toEqual({ status: "missing" });
+    expect(rankForms(stations, "Example City Harbor St Station")).toEqual({ status: "picked", index: 0, rank: "allWords" });
+    expect(rankForms([choice("North Example Avenue"), choice("Lakeside Drive")], "Example Ave")).toEqual({
       status: "picked",
       index: 0,
       rank: "words",
     });
-    expect(rankForms([choice("St. Johns"), choice("Johnstown")], "Saint Johns")).toEqual({ status: "picked", index: 0, rank: "folded" });
+    expect(rankForms([choice("St. Example"), choice("Exampletown")], "Saint Example")).toEqual({ status: "picked", index: 0, rank: "folded" });
+    expect(rankForms([choice("St-Mary"), choice("Maryville")], "Saint Mary")).toEqual({ status: "picked", index: 0, rank: "folded" });
   });
 
   test("international, center, mount, fort and and written short or as a sign match", () => {
-    expect(rankForms([choice("Harbor City Intl (HCX)"), choice("Harbor City Regional (HCR)")], "HCX International")).toEqual({
+    expect(rankForms([choice("Harbor City Intl (HCX)"), choice("Harbor City Regional (HCR)")], "Harbor City International")).toEqual({
+      status: "picked",
+      index: 0,
+      rank: "words",
+    });
+    expect(rankForms([choice("HCX, Harbor City Intl")], "Harbor City International HCX")).toEqual({
       status: "picked",
       index: 0,
       rank: "allWords",
@@ -175,12 +207,12 @@ describe("rankChoices other written forms", () => {
   });
 
   test("a state's or district's code and name match where a place ends the value", () => {
-    const cities = [choice("San Jose, California"), choice("San Jose, Costa Rica")];
-    expect(rank(cities, "San Jose CA")).toEqual({ status: "missing" });
-    expect(rankForms(cities, "San Jose CA")).toEqual({ status: "picked", index: 0, rank: "folded" });
+    const cities = [choice("Exampleton, California"), choice("Exampleton, Example Country")];
+    expect(rank(cities, "Exampleton CA")).toEqual({ status: "missing" });
+    expect(rankForms(cities, "Exampleton CA")).toEqual({ status: "picked", index: 0, rank: "folded" });
     const springfields = [choice("Springfield, Illinois, USA"), choice("Springfield, Missouri, USA")];
     expect(rankForms(springfields, "Springfield IL")).toEqual({ status: "picked", index: 0, rank: "words" });
-    expect(rankForms([choice("Union Station, Washington, D.C."), choice("Union Station, Example City")], "Union Station DC")).toEqual({
+    expect(rankForms([choice("Central Station, Washington, D.C."), choice("Central Station, Example City")], "Central Station DC")).toEqual({
       status: "picked",
       index: 0,
       rank: "folded",
@@ -190,7 +222,7 @@ describe("rankChoices other written forms", () => {
 
   test("a spelling as given still decides at its rank, and an option's value never matches another form", () => {
     // The value as given matches one option as whole words; the code's other forms never add a tie.
-    expect(rankForms([choice("Reagan National, Washington DC"), choice("Example DC Annex")], "Washington DC")).toEqual({
+    expect(rankForms([choice("Example Airport, Washington DC"), choice("Example DC Annex")], "Washington DC")).toEqual({
       status: "picked",
       index: 0,
       rank: "words",
@@ -213,8 +245,22 @@ describe("spellingsOf", () => {
     expect(spellingsOf("Washington DC")).toContain("washington d c");
   });
 
-  test("lists at most 32 forms", () => {
-    expect(spellingsOf("1st 2nd 3rd 4th 5th 6th St").length).toBeLessThanOrEqual(32);
+  test("lists at most 32 forms, keeping the later words' forms, where a place's code falls", () => {
+    const forms = spellingsOf("1st 2nd 3rd 4th 5th 6th St");
+    expect(forms).toHaveLength(32);
+    // The first words keep the value's own form; every form of the last words is tried.
+    expect(forms.slice(1).every((form) => form.startsWith("1st 2nd "))).toBe(true);
+    expect(forms.slice(0, 6)).toEqual([
+      "1st 2nd 3rd 4th 5th 6th St",
+      "1st 2nd 3rd 4th 5th 6th street",
+      "1st 2nd 3rd 4th 5th 6th saint",
+      "1st 2nd 3rd 4th 5th sixth st",
+      "1st 2nd 3rd 4th 5th sixth street",
+      "1st 2nd 3rd 4th 5th sixth saint",
+    ]);
+    expect(spellingsOf("Example Plaza 1st 2nd 3rd 4th 5th 6th Springfield IL")).toContain(
+      "example plaza 1st 2nd 3rd 4th 5th 6th springfield illinois",
+    );
   });
 });
 
