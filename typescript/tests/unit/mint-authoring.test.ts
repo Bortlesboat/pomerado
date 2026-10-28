@@ -1231,7 +1231,10 @@ it("has a tool return the site's no to a valid request as a declared refusal quo
     "- A write that declines the task because the caller's own limit or the page's state rules it out, such as a total over the caller's price limit or a product number whose page names another item than the caller's: `InvalidInput`, thrown before the mark of the commit it guards (writes skill). Pass `field`, the input the caller would change, `kind`, the reason as a stable lowercase token such as `over_price_limit` or `item_mismatch`, and `available` where the page lists choices,",
   );
   expect(text("caller-input")).toContain(
-    "A write returns a refusal as its output only when its output schema declares that refusal, and only where the writes skill says one completes the run, such as before its first mark: any other output a write returns without `verified()` reports a possible change. - When the site itself says no to a valid request, such as an item out of stock or a variant it does not offer, prefer the writes skill's refusal quoting the site. - A write whose steps",
+    "A write returns a refusal as its output only when its output schema declares that refusal, and only where the writes skill says one completes the run, such as before its first mark: any other output a write returns without `verified()` reports a possible change.",
+  );
+  expect(text("caller-input")).toContain(
+    "- When the site itself says no to a valid request, such as an item out of stock or a variant it does not offer, prefer the writes skill's refusal quoting the site. - A write whose steps",
   );
   expect(text("caller-input")).toContain(
     "(writes skill). - A read whose site says no to the whole request, such as a product it no longer sells, prefers returning that no as a declared refusal with `site_message` over throwing (writes skill). - A write that declines",
@@ -1286,15 +1289,15 @@ it("renders the pinned standalone authoring", async () => {
       .filter(([path]) => path !== "reference/publication-review.md")
       .map(([path, text]) => [sha256(text), `workspace/${path}`]),
   ]).toStrictEqual([
-    ["c9ac0d5549c185ef624e98922edbaeaea86416a8a79de29d2943b79c4c81c4cf", "core"],
+    ["1c6fec0b5f838031caa2c13029a65d8b13bf89ff5b2fa0318042d36e153ee317", "core"],
     ["933e2daac360d31beeeb2a8aeabcf22ca8512cc0272f321b047106f4a2055ab3", "search"],
-    ["cec5bca01bf057a95faaab07e25c02e3d0b9329e66d6df97b6744f81ab421bf7", "auth"],
+    ["930550863b9f83e98719b77bc149b20e70b526a88a16dd758d44ab20d048d8cb", "auth"],
     ["ad5b4f8391094f6d7c8ff4a480b071bb298807da9523971e0aaf7d719f152664", "testing"],
     ["2b559ad88157f28be2a054787f4c736cf192bb825760bdf3050c01a59d060ba8", "pagination"],
     ["9bdfbeacd87c777734e2f2fb3fc934676433a5e7881980000f2c25706ac6d66c", "forms"],
-    ["60d94f1bc738726cfd31a34cd99b390e8ff7fcc9b6012d917061330c257ad22d", "writes"],
+    ["3a907b1f23f0f637f30adad9939751c9052a540fa182d14ed412bb071cac68d1", "writes"],
     ["d06f650fc09f74d3711e043da2303de97ced42c9ff2541d48ec28cd7e686519d", "cart"],
-    ["14ec800f1f19a16e1a94c11e8a4e869e798bf597d86cd2369a51d32d66c9bc94", "caller-input"],
+    ["b6dd72d69c30ac9a1818ac1baeae48e701cd318f04d11e04ef8c03d812b91a16", "caller-input"],
     ["fb7cd6b0929612a94dd6e0a3c54fa42e102ada77ccd83059fe818a01d8307cf0", "publication"],
     ["2aa706abc7901c4e32ab803355f828f4b383422ac3a56c3959bd7f906c136b32", "workspace/AGENTS.md"],
     ["9501ae9c273d5d4db8976a544879f7aee44212c8a616b00e74263dcd3c593035", "workspace/README.md"],
