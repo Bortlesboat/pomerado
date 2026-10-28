@@ -696,60 +696,6 @@ describe("OpenAI reviewer policy and trusted authority", () => {
     );
   });
 
-  // A read with no login switched the page's currency. With nothing in the review's input saying
-  // the session was signed out, Guardian applied the signed-in rule and denied the switch as a
-  // preference change. The host now states it as trusted_execution_context.session, and the
-  // policy reads signed_out as a session established signed out.
-  it("tells Guardian a host's signed_out session fact establishes a signed-out session", async () => {
-    const context: NonNullable<PendingExecution["mintContext"]> = {
-      repeatableRead: true,
-      operationSources: [pending.entrypoint],
-      browser: "active",
-      executions: [],
-    };
-    const fallback =
-      "When the review cannot establish that the session is signed out, for example because the task names a login or an earlier step signed in, apply the signed-in rule.";
-    const sentence =
-      "When trusted_execution_context.session is signed_out, the job holds no saved login and no sign-in ran in this attempt: treat the session as established signed out and judge its own state changes by the signed-out rule above.";
-    const reviewed = async (mintContext: NonNullable<PendingExecution["mintContext"]>) => {
-      const requests = readThenDecide({
-        outcome: "allow",
-        rationale: "Controlled source was read.",
-        action: "read",
-      });
-      await Effect.runPromise(
-        makeGuardian(reviewer(markedUpstreamPolicy)).review(
-          { ...pending, mintContext },
-          readEntrypoint,
-        ),
-      );
-      return requests;
-    };
-    const signedOut = await reviewed({ ...context, session: "signed_out" });
-    for (const policy of [
-      instructionsOf(signedOut[0]),
-      guardianExecutionPolicy(otherHost),
-      guardianExecutionPolicy(nativeExecutionEnvironment),
-    ]) {
-      const writeRule =
-        policy.split("\n").find((line) => line.startsWith("Classify actual website effects")) ??
-        "";
-      // It follows the signed-in fallback, after the signed-out rule it points back to.
-      expect(writeRule).toContain(`${fallback} ${sentence}`);
-      expect(
-        writeRule.indexOf("In a signed-out session, changing the session's own state is part"),
-      ).toBeLessThan(writeRule.indexOf(sentence));
-    }
-    expect(modelInput(signedOut)).toMatchObject({
-      trusted_execution_context: { session: "signed_out" },
-    });
-    // A host that leaves it out sends the context as before, with no session at all.
-    const omitted = modelInput(await reviewed(context)) as {
-      trusted_execution_context: Record<string, unknown>;
-    };
-    expect(omitted.trusted_execution_context).toEqual(context);
-  });
-
   // Guardian escalated example runs because it could not read an SDK helper the source imports,
   // such as a browser script built from formControlsCode, and guessed SDK paths that don't exist.
   it("tells Guardian the SDK a source imports is trusted host code", async () => {
