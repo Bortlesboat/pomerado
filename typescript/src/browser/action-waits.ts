@@ -211,8 +211,7 @@ const outcomeWaitEvents = (candidates) => {
     on("framenavigated", (frame) => {
       if (frame !== page.mainFrame()) return;
       navigatedAt = Date.now();
-      // A same-document navigation, such as a history or hash change, leaves the loading document pending.
-      if (navigation === undefined || frame.url() === navigation.request.url()) navigation = undefined;
+      navigation = undefined;
     });
     on("request", (request) => {
       if (request.isNavigationRequest() && request.frame() === page.mainFrame()) navigation = { request, at: Date.now() };
