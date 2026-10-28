@@ -10,6 +10,17 @@ import { failureDetail } from "../runtime/failure-detail.js";
 export const authoredDirectories = ["src", "explore", "test", "scratch"] as const;
 const authoredPath = new RegExp(`^(${authoredDirectories.join("|")})/`);
 
+/** An installed skill's page as `read_source` takes it, relative or under `/workspace/`. */
+export const skillPagePath = /^(?:\/workspace\/)?\.agents\/([^/]+)\/SKILL\.md$/u;
+
+/**
+ * The most UTF-16 code units one read of an installed skill's page returns, whatever `limit` the
+ * model passes, so a skill's first read holds all of it: a model that picks a short limit and
+ * never follows `nextOffset` would otherwise miss the rules past it. The largest skill today, the
+ * core skill, is about 85,000. A page longer than this reads on from its `nextOffset`.
+ */
+export const skillReadLength = 131_072;
+
 export const relativeSourcePath = (path: string): string => {
   const relative = path.startsWith("/workspace/") ? path.slice(11) : path;
   if (
