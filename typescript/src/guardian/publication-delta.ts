@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { Option, Schema } from "effect";
 import { cutToLimit, PublicationFinding, PublicationReason } from "./review-contracts.js";
 import type { FindingResponse } from "./review-contracts.js";
+import { publicationFindingId } from "./publication.js";
 import { ownerNamedOrigins } from "./owner-named-origins.js";
 import type { PendingExecution } from "./review.js";
 import { unifiedDiff } from "./unified-diff.js";
@@ -31,29 +32,6 @@ const utf8 = new TextEncoder();
 const byteLength = (text: string) => utf8.encode(text).byteLength;
 export const textDigest = (text: string) =>
   `sha256:${createHash("sha256").update(text, "utf8").digest("hex")}`;
-
-/**
- * A finding's id: `f` and the first 10 hex digits of the digest of its file, range, category and
- * explanation as the review returned them. The harness gives it to the minter with the denial and
- * the next round names the same finding by it, each computing it from the finding alone, so no
- * host need carry it between them.
- */
-export const publicationFindingId = (
-  finding: Pick<PublicationFinding, "path" | "byteStart" | "byteEnd" | "category" | "explanation">,
-) =>
-  `f${createHash("sha256")
-    .update(
-      JSON.stringify([
-        finding.path,
-        finding.byteStart,
-        finding.byteEnd,
-        finding.category,
-        finding.explanation,
-      ]),
-      "utf8",
-    )
-    .digest("hex")
-    .slice(0, 10)}`;
 
 /**
  * The minter's answers this round rules on: the first answer to each finding of the prior round,

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Effect, Option, Schema } from "effect";
 import { answerSecurityExceptions } from "./answer-exceptions.js";
 import { autofillRecipePath } from "../destinations/autofill-recipe.js";
@@ -17,6 +18,29 @@ import type { PublicationScope } from "./review-contracts.js";
 import { ReviewFailure } from "./review.js";
 import { sourcePath } from "./review-layout.js";
 import { literalPattern } from "./source.js";
+
+/**
+ * A finding's id: `f` and the first 10 hex digits of the digest of its file, range, category and
+ * explanation as the review returned them. The harness gives it to the minter with the denial and
+ * the next round names the same finding by it, each computing it from the finding alone, so no
+ * host need carry it between them.
+ */
+export const publicationFindingId = (
+  finding: Pick<PublicationFinding, "path" | "byteStart" | "byteEnd" | "category" | "explanation">,
+) =>
+  `f${createHash("sha256")
+    .update(
+      JSON.stringify([
+        finding.path,
+        finding.byteStart,
+        finding.byteEnd,
+        finding.category,
+        finding.explanation,
+      ]),
+      "utf8",
+    )
+    .digest("hex")
+    .slice(0, 10)}`;
 
 /** The public definition the host writes from the minter's source and build metadata. */
 export const publicDefinitionPath = "publication/definition.json";

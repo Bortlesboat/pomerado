@@ -6,7 +6,7 @@ import { nativeExecutionEnvironment } from "../../src/guardian/execution-policy.
 import { makeOpenAIReviewer } from "../../src/guardian/openai.js";
 import { makeGuardian, ReviewFailure, type PendingExecution } from "../../src/guardian/review.js";
 import { makeSourceInspector } from "../../src/guardian/source.js";
-import { publicationFindingId } from "../../src/guardian/publication-delta.js";
+import { publicationFindingId } from "../../src/guardian/publication.js";
 import type { FindingResponse } from "../../src/guardian/review-contracts.js";
 
 /*

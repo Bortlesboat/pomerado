@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import { afterEach, expect, it } from "vitest";
 import { MintFailure, type PublicationRequest } from "../../src/mint/contracts.js";
 import { makeOpenAIMinter } from "../../src/mint/openai.js";
-import { publicationFindingId } from "../../src/guardian/publication-delta.js";
+import { publicationFindingId } from "../../src/guardian/publication.js";
 import type { PublicationFinding } from "../../src/guardian/review-contracts.js";
 
 /*

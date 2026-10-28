@@ -69,7 +69,7 @@ import {
   type PublicationFinding,
   type ResponseRuling,
 } from "../guardian/review-contracts.js";
-import { publicationFindingId } from "../guardian/publication-delta.js";
+import { publicationFindingId } from "../guardian/publication.js";
 import {
   taskUpdateForReview,
   type PendingTaskUpdate,
