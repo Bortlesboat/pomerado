@@ -29,17 +29,21 @@ or settings the task does not concern.
 # The login URL you record
 
 The `loginUrl` you pass on `authenticate` is published with the tool, and every run opens it to
-sign in. Follow the site's own sign-in link: record its exact `href`, read before you click it,
-never a trimmed, rebuilt or guessed copy. When that link works only with one-time values in it,
-record the page that shows the link as `loginUrl` and the link's click as a fieldless
-`signInStep`. Never record:
+sign in. It must work in a new browser with no cookies. Follow the site's own sign-in link as a
+signed-out visitor sees it: record its exact `href`, read before you click it, never a trimmed,
+rebuilt or guessed copy. Never copy cookies or session values into it. When that link works only
+with one-time values or this browser's session values in it, record the page that shows the link
+as `loginUrl` and the link's click as a fieldless `signInStep`. Never record:
 
 - a URL carrying one-time values: `state`, `nonce`, `code_challenge`, `code`, `session_state`,
   `SAMLRequest`, or a signed token or opaque random value in its query or fragment;
+- a URL carrying a device or session identifier the site put in the link for this browser, such
+  as a `did`, `device_id` or session id parameter;
 - an identity provider's authorize endpoint (`/authorize`, `/oauth2/…/authorize`,
   `/as/authorization.oauth2`, `/protocol/openid-connect/auth`), even on the site's own domain.
 
-Such a URL was made for one sign-in; a run that replays it starts from spent values.
+Such a URL was made for one sign-in or one browser; a run that replays it starts from spent values
+or another browser's session, which a site can meet with a bot challenge or an error.
 
 A login link often redirects through an identity provider and lands on an authorize URL with
 one-time parameters: record the link you clicked, not the page you landed on.
