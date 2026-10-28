@@ -28,11 +28,13 @@ it.each([
   expect(noOpScript(address)).toBe(true);
 });
 
-// The React toolkit's placeholder on a form whose submit its own code handles counts as a form's
-// own script submit too.
+// The React toolkit's placeholders on a form whose submit its own code handles, as its server
+// rendering and its client rendering write them, count as a form's own script submit too.
 it.each([
   "javascript:throw new Error('React form unexpectedly submitted.')",
   'javascript:throw new Error("React form unexpectedly submitted.")',
+  "javascript:throw new Error('A React form was unexpectedly submitted. If you called form.submit() manually, consider using form.requestSubmit() instead. If you\\'re trying to use event.stopPropagation() in a submit event handler, consider also calling event.preventDefault().')",
+  'javascript:throw new Error("A React form was unexpectedly submitted. If you called form.submit() manually, consider using form.requestSubmit() instead. If you\'re trying to use event.stopPropagation() in a submit event handler, consider also calling event.preventDefault().")',
 ])("counts %j as a form's own script submit", (address) => {
   expect(noOpScript(address, true)).toBe(true);
 });

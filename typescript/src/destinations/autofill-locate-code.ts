@@ -112,19 +112,46 @@ const controlShapeCode = String.raw`(element) => {
   }`;
 
 /**
+ * The messages of the React toolkit's placeholder form actions, `javascript:throw new Error(...)`,
+ * which it writes on a form or submit whose action is its own function: as its server rendering
+ * writes it, then as its client rendering does.
+ */
+const reactFormActionMessages = [
+  "React form unexpectedly submitted.",
+  "A React form was unexpectedly submitted. If you called form.submit() manually, consider using " +
+    "form.requestSubmit() instead. If you're trying to use event.stopPropagation() in a submit " +
+    "event handler, consider also calling event.preventDefault().",
+];
+
+/**
+ * A pattern of each message as a script string in single or double quotes. Its apostrophe is
+ * escaped in single quotes, as React writes it, and may be either way in double quotes.
+ */
+const reactFormActionStrings = reactFormActionMessages
+  .flatMap((message) => {
+    const text = message.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+    return [
+      `'${text.replaceAll("'", String.raw`\\'`)}'`,
+      `"${text.replaceAll("'", String.raw`\\?'`)}"`,
+    ];
+  })
+  .join("|");
+
+/**
  * Page code: whether an address is a script that does nothing, the only script action a sign-in
  * form may have: `javascript:`, `javascript:;`, `javascript:void(0)` or `javascript:void 0`, with
  * or without a closing semicolon, read as the browser runs it (the address as parsed, its body
- * percent-decoded). As a form's own action (`formAction`), the React toolkit's placeholder on a
- * form whose submit its own code handles counts too: `javascript:throw new Error('React form
- * unexpectedly submitted.')`, in single or double quotes, which only throws. A link's address never
- * counts it. The scheme may be in any case, and whitespace may stand only between the body's words
- * and signs, where script reads it as whitespace: one inside `void` could split it into two
- * statements, the second a call of the page's own function, and a line break after `throw` is no
- * script at all. The words are in the case script reads them; `Void(0)` calls a function of the
- * page's. Any other body runs what it says, so it is judged as any action off the site; so is any
- * other message, and a body that does not decode. The step call and the submission guard both judge
- * by it.
+ * percent-decoded). As a form's own action (`formAction`), the React toolkit's placeholders on a
+ * form whose submit its own code handles count too: `javascript:throw new Error('React form
+ * unexpectedly submitted.')`, as its server rendering writes it, and the longer message its client
+ * rendering writes (`reactFormActionMessages`), each in single or double quotes, which only throw.
+ * A link's address never counts them. The scheme may be in any case, and whitespace may stand only
+ * between the body's words and signs, where script reads it as whitespace: one inside `void` could
+ * split it into two statements, the second a call of the page's own function, and a line break
+ * after `throw` is no script at all. The words are in the case script reads them; `Void(0)` calls a
+ * function of the page's. Any other body runs what it says, so it is judged as any action off the
+ * site; so is any other message, and a body that does not decode. The step call and the submission
+ * guard both judge by it.
  */
 export const noOpScriptCode = String.raw`(address, formAction = false) => {
   let url;
@@ -143,7 +170,7 @@ export const noOpScriptCode = String.raw`(address, formAction = false) => {
   return (
     /^\s*(?:void\s*\(\s*0\s*\)|void\s+0)?\s*;?\s*$/.test(body) ||
     (formAction === true &&
-      /^\s*throw[^\S\n\r\u2028\u2029]+new\s+Error\s*\(\s*(["'])React form unexpectedly submitted\.\1\s*\)\s*;?\s*$/.test(body))
+      /^\s*throw[^\S\n\r\u2028\u2029]+new\s+Error\s*\(\s*(?:${reactFormActionStrings})\s*\)\s*;?\s*$/.test(body))
   );
 }`;
 
