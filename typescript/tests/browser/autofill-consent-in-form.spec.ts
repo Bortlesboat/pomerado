@@ -101,11 +101,15 @@ const inspect = (hosted: Awaited<ReturnType<typeof host>>, step: AutofillStep) =
     return inspection;
   });
 
-const fill = async (hosted: Awaited<ReturnType<typeof host>>, step: AutofillStep) =>
+const fill = async (
+  hosted: Awaited<ReturnType<typeof host>>,
+  step: AutofillStep,
+  values = [username, password],
+) =>
   Effect.runPromise(
     fillAutofillStep({
       step,
-      values: [username, password],
+      values,
       inspection: await inspect(hosted, step),
       page: hosted.page,
       keyboard: hosted.keyboard,
@@ -118,11 +122,11 @@ const signedIn = { target: "login", username, password };
 const acceptedEmpty = { target: "accept", username: "", password: "" };
 
 /** The step sent again after its fill was blocked, as the host clicks a blocked screen again. */
-const resubmit = async (hosted: Awaited<ReturnType<typeof host>>) =>
+const resubmit = async (hosted: Awaited<ReturnType<typeof host>>, step = dismissed) =>
   Effect.runPromise(
     resubmitAutofillStep({
-      step: dismissed,
-      inspection: await inspect(hosted, dismissed),
+      step,
+      inspection: await inspect(hosted, step),
       page: hosted.page,
       settleMs: 1_000,
     }),
@@ -225,6 +229,29 @@ test("a notice that caught the sign-in's click after typing is dismissed with th
   expect(report).toMatchObject({ outcome: "filled", submit: "clicked" });
   expect(received).toEqual([signedIn]);
   expect(hosted.typed).toEqual([username, password, username, password]);
+});
+
+test("a code screen whose click again finds every box emptied by the dismiss clicks nothing and sends nothing", async ({
+  page,
+}) => {
+  const digits = ["1", "2", "3", "4", "5", "6"];
+  const boxes = digits.map((_, index) => `<input id="c${index}" name="c${index}" maxlength="1">`);
+  const received = await serve(page, loginPage({ formExtra: boxes.join("") }));
+  const hosted = await host(page);
+  const codeStep: AutofillStep = {
+    fields: digits.map((_, index) => ({ selector: `#c${index}`, slot: "code" })),
+    submit: "#login",
+  };
+  const blocked = await fill(hosted, codeStep, digits);
+  expect(blocked).toMatchObject({ outcome: "filled", submit: "blocked" });
+
+  // The dismiss empties every box before its click, so the click again finds one empty.
+  const again = await resubmit(hosted, { ...codeStep, dismiss: "#cookie-accept" });
+  expect(again).toMatchObject({
+    submit: "not_attempted",
+    fields: digits.map((_, index) => ({ status: index === 0 ? "failed" : "filled" })),
+  });
+  expect(received).toEqual([]);
 });
 
 test("a notice drawn only once the fields hold input, inside the sign-in form, is dismissed with the fields emptied first, and the host types them again and submits once", async ({

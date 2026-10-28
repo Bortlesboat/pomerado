@@ -587,9 +587,10 @@ const screenBack = (first: Either.Either<CallAnswer, Error>) => {
  * `first`). Each look only reads the page and never clicks, so a look that fails, as one does while
  * the page navigates, is a look lost. A look that finds the page sent what was typed reports that
  * (`page`). A look that finds the fields back leaves the first answer standing, no longer closed in
- * place (`screenBack`), and the end of the wait leaves it as it was. After a submit call's first
- * answer but `left`, a box that still fails its check is the screen that answer found, so the host
- * looks again.
+ * place (`screenBack`). The end of the wait leaves it as it was, unless a look found the code
+ * screen closed in place (`closed`), which then stands, so the sign-in's own check decides, as
+ * after a submit call that found it so. After a submit call's first answer but `left`, a box that
+ * still fails its check is the screen that answer found, so the host looks again.
  */
 const awaitNewDocument = (
   input: CallInput,
@@ -604,14 +605,16 @@ const awaitNewDocument = (
     const since = Date.now();
     const look: AutofillFillCall = { ...call, look: true };
     const raced = !leftOnly(first);
+    let closed: Either.Either<CallAnswer, Error> | undefined;
     while (Date.now() - since < sendMs) {
       yield* Effect.sleep(submitPollMs);
       const answered = yield* fillCall(input, progress, changes)(look);
       if (pageSent(answered)) return answered;
+      if (Either.isRight(answered) && "closed" in answered.right) closed = answered;
       if (Either.isRight(answered) && !leftOnly(answered) && !(raced && unchecked(answered)))
         return screenBack(first);
     }
-    return first;
+    return closed ?? first;
   });
 
 /** How long a step with fields gives its page to send what was typed itself (`pageSendMs`). */
@@ -657,19 +660,39 @@ const submitCall = (
  * page sent what was typed, the fill reports that; otherwise the first failure stands. On a step
  * with a submit whose fields are gone from the document the host typed in, the host looks again
  * without clicking (`awaitNewDocument`), as on a code step whose call raced its page
- * (`codeSentBySite`).
+ * (`codeSentBySite`). A code step's page may send the code itself on its last digit while the
+ * screen still shows, so on a step whose every field takes a code (`codeOnly`) the host first only
+ * looks (`lookFirst`), for up to `pageSendMs` from the last field's fill: a look that finds the
+ * screen as typed, or is lost, looks again, and any other answer is taken as the submit call's
+ * would be. Only then does the submit call click. A click again of a blocked screen skips that
+ * first look, and none of its later looks takes every box locked or emptied as the page's own send
+ * (`codeLook`): its dismiss may have emptied every box itself.
  */
-const submitWhenEnabled = (input: CallInput, progress: FillProgress, call: AutofillFillCall) =>
+const submitWhenEnabled = (
+  input: CallInput,
+  progress: FillProgress,
+  call: AutofillFillCall,
+  lookFirst: boolean,
+) =>
   Effect.gen(function* () {
     const started = Date.now();
     const sendMs = sendWindow(input);
     const readsOnly = !hostSubmits(input.step) && sendMs > 0;
+    const look =
+      lookFirst && call.kind === "submit" && codeOnly(input.step) && sendMs > 0
+        ? { ...call, look: true as const }
+        : undefined;
     let unsentSince: number | undefined;
     let lost: Either.Either<CallAnswer, Error> | undefined;
     let lastLost = false;
     const changes = { count: 0 };
     for (;;) {
-      const answered = yield* fillCall(input, progress, changes)(call);
+      const looking = look !== undefined && Date.now() - started < sendMs;
+      const answered = yield* fillCall(input, progress, changes)(looking ? look : call);
+      if (looking && (Either.isLeft(answered) || unclicked(answered, "none"))) {
+        yield* Effect.sleep(submitPollMs);
+        continue;
+      }
       const raced =
         codeSentBySite(input.step) && (Either.isLeft(answered) || unchecked(answered));
       if ((leftOnly(answered) || raced) && sendMs > 0)
@@ -691,11 +714,14 @@ const submitWhenEnabled = (input: CallInput, progress: FillProgress, call: Autof
 /**
  * One field: a date's call fills it; any other field's call focuses it and binds its original node/document/frame; the host inserts its
  * value atomically. Undefined when the fill goes on to the next field, else the step's report.
+ * The focus call of the first of the step's code boxes (`boxes`) first empties every box that
+ * still holds something (`emptyBoxes`).
  */
 const fillField = (
   input: FillInput,
   progress: FillProgress,
   index: number,
+  boxes: readonly number[],
 ): Effect.Effect<AutofillStepReport | undefined> =>
   Effect.gen(function* () {
     const field = input.step.fields[index];
@@ -707,7 +733,12 @@ const fillField = (
       progress,
     )(
       format === undefined
-        ? { kind: "focus", index, bindingKey }
+        ? {
+            kind: "focus",
+            index,
+            bindingKey,
+            ...(index === boxes[0] ? { emptyBoxes: boxes } : {}),
+          }
         : { kind: "date", index, iso: value, format },
     );
     if (answered._tag === "Left")
@@ -800,10 +831,15 @@ const afterFieldCall = (
           sendWindow(input),
           { count: 0 },
         );
-        if (Either.isLeft(looked) || !("pageSent" in looked.right)) return lost;
+        if (Either.isLeft(looked)) return lost;
+        const found = looked.right;
+        if (!("pageSent" in found) && !("closed" in found)) return lost;
         progress.typed = true;
         progress.statuses.push("filled");
-        return filledReport(input.step, progress, "page", looked.right.url);
+        // A code screen closed in place is the sign-in's own check to decide (`closedInPlace`).
+        return "pageSent" in found
+          ? filledReport(input.step, progress, "page", found.url)
+          : stopped(input.step, progress, found, "submit");
       }
       if (typing.right === "inserted") {
         progress.typed = true;
@@ -898,11 +934,11 @@ export const fillAutofillStep = (input: FillInput): Effect.Effect<AutofillStepRe
     };
     const notice = yield* dismissNotice(input, progress);
     if (notice.refusal !== undefined) return notice.refusal;
+    const boxes = codeBoxes(step, input.values);
     for (let index = 0; index < step.fields.length; index++) {
-      const ended = yield* fillField(input, progress, index);
+      const ended = yield* fillField(input, progress, index, boxes);
       if (ended !== undefined) return ended;
     }
-    const boxes = codeBoxes(step, input.values);
     const typed =
       input.typedBefore === undefined ? undefined : [...input.typedBefore, ...input.values];
     const typeAgain = (fill: FillInput) =>
@@ -910,7 +946,7 @@ export const fillAutofillStep = (input: FillInput): Effect.Effect<AutofillStepRe
         progress.statuses.length = 0;
         progress.check = [];
         for (let index = 0; index < step.fields.length; index++) {
-          const ended = yield* fillField(fill, progress, index);
+          const ended = yield* fillField(fill, progress, index, boxes);
           if (ended !== undefined) return ended;
         }
         return yield* submitStep(fill, progress, boxes, typed);
@@ -939,12 +975,13 @@ export const fillAutofillStep = (input: FillInput): Effect.Effect<AutofillStepRe
  * (`dismissNotice`), or a control is gone or moved where the host refuses it. Then each field the
  * fill typed must still hold something (lengths only, never a value), and each box of a code split
  * across one-character boxes exactly one character, or that field fails and the submit is not
- * attempted; otherwise the submit is judged, guarded and clicked as the fill's own was, and the
- * report says what became of it. A click another element catches again, as one the dismiss did not
- * clear or one with nothing to dismiss, such as a fixed footer, is pressed from the keyboard
- * instead: the host focuses that same submit and presses Enter on it, only once focus landed on it,
- * under the same guard, and reports it `clicked` with `via: "keyboard"`; the element over it is
- * never clicked. When focus goes anywhere else it is `blocked` again.
+ * attempted; otherwise the submit is judged, guarded and clicked as the fill's own was, with no
+ * look first (`submitWhenEnabled`), and the report says what became of it. A click another element
+ * catches again, as one the dismiss did not clear or one with nothing to dismiss, such as a fixed
+ * footer, is pressed from the keyboard instead: the host focuses that same submit and presses Enter
+ * on it, only once focus landed on it, under the same guard, and reports it `clicked` with
+ * `via: "keyboard"`; the element over it is never clicked. When focus goes anywhere else it is
+ * `blocked` again.
  */
 export const resubmitAutofillStep = (input: CallInput): Effect.Effect<AutofillStepReport> =>
   Effect.gen(function* () {
@@ -1046,22 +1083,23 @@ const dismissNotice = (
  * must hold exactly one character before the click. A clicked submit reports where the page went
  * (`navigated`, `reportedNavigation`) only when `typed`, every value the sign-in typed on this
  * browser, is known: a click again, or a fill whose host did not say what it typed before
- * (`typedBefore`), never reports it. `pressCovered`, on a click again only, presses the submit from
- * the keyboard when another element catches its click.
+ * (`typedBefore`), never reports it. `clickAgain`, on a click again only, presses the submit from
+ * the keyboard when another element catches its click, and clicks with no look first.
  */
 const submitStep = (
   input: CallInput,
   progress: FillProgress,
   boxes: readonly number[],
   typed: readonly string[] | undefined,
-  pressCovered = false,
+  clickAgain = false,
 ) =>
   Effect.gen(function* () {
     const { step } = input;
     const clicked = yield* submitWhenEnabled(
       input,
       progress,
-      submitCall(input, progress, boxes, pressCovered),
+      submitCall(input, progress, boxes, clickAgain),
+      !clickAgain,
     );
     if (clicked._tag === "Left")
       return failedCall(progress, clicked.left, { mayMutate: hostSubmits(step) });
