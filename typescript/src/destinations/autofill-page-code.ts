@@ -217,8 +217,9 @@ export type AutofillFillCall =
       readonly fieldGet: readonly boolean[];
       /**
        * A sign-in step's submit: its guard lets a submission to a script that does nothing
-       * (`javascript:`, `javascript:void(0)`, `javascript:;`) fire by GET, since navigating there
-       * puts no entry in an address and runs nothing.
+       * (`javascript:`, `javascript:void(0)`, `javascript:;`) or to one of the React toolkit's
+       * placeholders, which only throw, fire by GET, since navigating there puts no entry in an
+       * address and sends nothing.
        */
       readonly scriptSubmit?: true;
       /** Only look: a call that finds the step's fields clicks nothing and answers `none`. */
@@ -1060,7 +1061,9 @@ for (let index = 0; index < selectors.length; index++) {
   foundFields.push(foundField);
 }
 const foundSubmit =
-  (submitKey !== null && foundFields.length > 0) || submitSelector === null ? null : await locate(submitSelector);
+  (submitKey !== null && foundFields.length > 0) || submitSelector === null
+    ? null
+    : await locate(submitSelector, undefined, foundFields);
 if (foundSubmit !== null && "error" in foundSubmit) {
   await checkReads(foundFields);
   return { ...foundSubmit, target: "submit", url: primary.url()${fill?.call.kind === "submit" ? ", document: await documentStart()" : ""} };

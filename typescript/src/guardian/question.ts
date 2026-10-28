@@ -10,11 +10,85 @@ import {
   type ValidAnswers,
 } from "../runtime/input-request.js";
 
+/**
+ * The rule that decided a question review, as Guardian names it: finite codes only, never the
+ * question's words, so a host may record it beside the outcome.
+ * - `allow_business`: `ambiguous_request`, `owner_information`, `changes_output`,
+ *   `unavailable_value`, `navigation_help`, `sign_in`, `owner_confirmation`, `finding_choice`,
+ *   `read_or_write` or `blocked_report`.
+ * - `reword` with a question still needed in other words: `unclear` or `misdescribed`.
+ * - `reword` with no question needed (`questionNotNeededLabels`): `readable`, `repeat`,
+ *   `optional_field`, `already_authorized`, `host_internal` or `unsafe`.
+ * - `authentication`: `login`.
+ * - `other` when none fits, or for a code this list does not hold.
+ */
+export const questionReviewLabels = [
+  "ambiguous_request",
+  "owner_information",
+  "changes_output",
+  "unavailable_value",
+  "navigation_help",
+  "sign_in",
+  "owner_confirmation",
+  "finding_choice",
+  "read_or_write",
+  "blocked_report",
+  "unclear",
+  "misdescribed",
+  "readable",
+  "repeat",
+  "optional_field",
+  "already_authorized",
+  "host_internal",
+  "unsafe",
+  "login",
+  "other",
+] as const;
+export type QuestionReviewLabel = (typeof questionReviewLabels)[number];
+
+/** The reword labels that say no question is needed: the minter goes on without asking. */
+export const questionNotNeededLabels: readonly QuestionReviewLabel[] = [
+  "readable",
+  "repeat",
+  "optional_field",
+  "already_authorized",
+  "host_internal",
+  "unsafe",
+];
+
+const isQuestionReviewLabel = (value: string): value is QuestionReviewLabel =>
+  (questionReviewLabels as readonly string[]).includes(value);
+
+/** A label as Guardian wrote it; a code the list does not hold decodes as `other`. */
+const QuestionReviewLabelFromString = Schema.transform(
+  Schema.String,
+  Schema.Literal(...questionReviewLabels),
+  {
+    strict: true,
+    decode: (value) => (isQuestionReviewLabel(value) ? value : "other"),
+    encode: (value) => value,
+  },
+);
+
 export const QuestionDecision = Schema.Struct({
   outcome: Schema.Literal("allow_business", "authentication", "reword"),
   rationale: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(1000)),
+  /** The rule that decided it; absent from an older reviewer. */
+  label: Schema.optional(QuestionReviewLabelFromString),
 });
 export type QuestionDecision = typeof QuestionDecision.Type;
+
+/**
+ * The publication finding a question is about (`AgentRequest.finding`), as the host recorded it
+ * from Guardian's latest denial: its id, category, file as the minter's workspace names it, and
+ * explanation, screened like the minter's copy.
+ */
+export interface QuestionFinding {
+  readonly id: string;
+  readonly category: string;
+  readonly file: string;
+  readonly explanation: string;
+}
 
 /** One offered option as the caller sees it: the full label, and the masked one the API shows. */
 interface ReviewedOption {
@@ -81,6 +155,11 @@ export interface PendingQuestion {
    * that review. Guardian binds the owner's yes to exactly that step.
    */
   readonly confirms?: readonly ConfirmedStepQuestion[];
+  /**
+   * Host evidence: the finding of the build's latest publication denial the question is about,
+   * so the review can allow a question asking the owner to choose between the fixes it permits.
+   */
+  readonly finding?: QuestionFinding;
 }
 
 /** A confirm question that asks the owner to confirm the step execution review `reviewId` held. */
@@ -119,6 +198,7 @@ export const questionForReview = <E>(
     readonly scriptAsk?: true;
     readonly buildEffect?: "read" | "write";
     readonly confirms?: readonly ConfirmedStepQuestion[];
+    readonly finding?: QuestionFinding;
   },
   screen: (text: string) => Effect.Effect<string, E>,
 ): Effect.Effect<PendingQuestion, E> =>
@@ -187,6 +267,17 @@ export const questionForReview = <E>(
         ? {}
         : {
             confirms: facts.confirms.map(({ questionId, reviewId }) => ({ questionId, reviewId })),
+          }),
+      // Written by the harness from the finding it screened for the minter.
+      ...(facts.finding === undefined
+        ? {}
+        : {
+            finding: {
+              id: facts.finding.id,
+              category: facts.finding.category,
+              file: facts.finding.file,
+              explanation: facts.finding.explanation,
+            },
           }),
     };
   });

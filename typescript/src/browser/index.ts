@@ -133,6 +133,19 @@ export {
   requestPastChallenge,
 } from "../runtime/http-operation.js";
 export {
+  batchFetchCode,
+  batchRead,
+  batchReadConcurrency,
+  batchReadDefaults,
+} from "../runtime/batch-read.js";
+export type {
+  BatchClock,
+  BatchReadItem,
+  BatchReadOptions,
+  BatchReadRequest,
+  BatchReadResult,
+} from "../runtime/batch-read.js";
+export {
   EmbeddedJsonFailure,
   embeddedJson,
   parseHtml,

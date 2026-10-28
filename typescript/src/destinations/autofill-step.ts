@@ -174,8 +174,9 @@ const Target = Schema.Struct({
   actions: Schema.Array(Schema.String),
   /**
    * Its form's own action, the first of `actions`, is a script that does nothing (`javascript:`,
-   * `javascript:void(0)`, `javascript:;`): the page's own code does whatever sending the form does.
-   * A step call that finds it changed judges the controls again.
+   * `javascript:void(0)`, `javascript:;`) or one of the React toolkit's placeholders, which only
+   * throw (`noOpScriptCode`): the page's own code does whatever sending the form does. A step call
+   * that finds it changed judges the controls again.
    */
   scriptAction: Schema.optional(Schema.Boolean),
   /**
