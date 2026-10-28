@@ -99,6 +99,12 @@ answers `{ success, result, error, stderr }`. Throw
   their one `waitForRows` or `waitForValues` after the last change, which passes at once on a
   settled page.
 - `waitForOutcome` already waited for its answer, so prefer no extra wait for that same answer after it.
+- A step that changes the site's own setting, such as a store, location, currency or language,
+  often reloads the same URL or redraws the page after the site saves it, and the element the next
+  step uses may already show on the old page, where `waitForOutcome` counts it once unchanged for
+  2 s. Prefer naming an outcome only the new page shows: `{ url: page.url() }`, which after an
+  `action` counts only once the page navigated, beside the new setting shown outside its dialog.
+  Then look the next element up again before typing.
 - Check the null case if possible. Make sure the tool handles a lookup or filter that matches
   nothing.
 - Start a response wait in the same call as the click that causes it: name the response as a
