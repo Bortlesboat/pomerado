@@ -1167,6 +1167,33 @@ describe("the OpenAI publication reviewer", () => {
     },
   );
 
+  // A publication review reads the host's session fact as an execution review does, under the
+  // same shared execution policy, so the two judge a signed-out session's own state alike.
+  it("sends the host's signed_out session fact and the rule that reads it", async () => {
+    const requests = scripted(() => [message(allow)]);
+    const signedOut: PendingExecution = {
+      ...pending,
+      mintContext: {
+        repeatableRead: false,
+        operationSources: [pending.entrypoint],
+        browser: "closed",
+        executions: [],
+        session: "signed_out",
+      },
+    };
+    await Effect.runPromise(
+      makeGuardian(
+        makeOpenAIReviewer("Synthetic policy {{ tenant_policy_config }}", false, native),
+      ).review(signedOut, sourcesOf(files)),
+    );
+    expect(reviewRequest(requests[0])["trusted_execution_context"]).toMatchObject({
+      session: "signed_out",
+    });
+    expect(instructionsOf(requests[0])).toContain(
+      "When trusted_execution_context.session is signed_out, the job holds no saved login and no sign-in ran in this attempt: treat the session as established signed out and judge its own state changes by the signed-out rule above.",
+    );
+  });
+
   // A host that registers its own publication policy keeps exactly what it sends: the policy
   // replaces the core one in the review's own message, and no file index or turn limit is added
   // to its review.
