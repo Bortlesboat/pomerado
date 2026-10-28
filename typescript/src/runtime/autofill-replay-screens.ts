@@ -171,13 +171,17 @@ const atDeadline =
 /**
  * A sign-in that may end on a page that can't tell went past the screens once the page left them
  * and the entry page, stayed put a moment (or until the screen's deadline) and can't tell, as a
- * site's login page sends a signed-in browser to its account picker, or a site skips a recorded
- * code screen this time. A page off the sign-in screens is no sign-out. The last check decides
- * from that page, and a replay that sent the login goes on only as one that sent it cleanly
- * (`lastCheck`).
+ * site's login page sends a signed-in browser to its account picker. A page off the sign-in
+ * screens is no sign-out. The last check decides from that page, and a replay that sent the login
+ * goes on only as one that sent it cleanly (`lastCheck`). A recorded code screen's wait never ends
+ * so, since a site may show a page the recipe never recorded, such as a security check, before its
+ * code screen: the wait runs to its deadline, where the host's challenge look runs first
+ * (`atDeadline`), and a code screen that never showed leaves the sign-in check to decide, which may
+ * still end on such a page, as when a site skips its code screen this time (`codeScreenMissing`).
  */
 const landedCantTell = <E extends YieldableError, V extends string>(
   input: Pick<AutofillReplayInput<E, V>, "hooks" | "recipe">,
+  awaited: AutofillStep,
   off: OffScreens | undefined,
   now: number,
   until: number,
@@ -185,6 +189,7 @@ const landedCantTell = <E extends YieldableError, V extends string>(
   screens: ReplayScreens,
 ) =>
   input.hooks.confirmCantTell !== undefined &&
+  !awaited.fields.some((field) => field.slot === "code") &&
   off !== undefined &&
   (now - off.since >= landingSettleMs || now >= until) &&
   cantTell(here, input.recipe, screens.onScreens);
@@ -433,7 +438,7 @@ export const makeReplayScreenWait = <
         left.off = stillOff(left.off, leftSignIn(here.url) ? here.url : undefined, at);
         const landed = landedReason(
           here.signedIn,
-          landedCantTell(input, left.off, at, waitUntil, here, screens),
+          landedCantTell(input, step, left.off, at, waitUntil, here, screens),
           entryCantTell(
             progress,
             entry,
