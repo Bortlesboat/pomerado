@@ -115,14 +115,18 @@ const controlShapeCode = String.raw`(element) => {
  * Page code: whether an address is a script that does nothing, the only script action a sign-in
  * form may have: `javascript:`, `javascript:;`, `javascript:void(0)` or `javascript:void 0`, with
  * or without a closing semicolon, read as the browser runs it (the address as parsed, its body
- * percent-decoded). The scheme may be in any case, and whitespace may stand only between the
- * body's words and signs, where script reads it as whitespace: one inside `void` could split it into
- * two statements, the second a call of the page's own function. `void` is lowercase, as script
- * reads it; `Void(0)` calls a function of the page's. Any other body runs what it says, so it is
- * judged as any action off the site; one that does not decode, too. The step call and the
- * submission guard both judge by it.
+ * percent-decoded). As a form's own action (`formAction`), the React toolkit's placeholder on a
+ * form whose submit its own code handles counts too: `javascript:throw new Error('React form
+ * unexpectedly submitted.')`, in single or double quotes, which only throws. A link's address never
+ * counts it. The scheme may be in any case, and whitespace may stand only between the body's words
+ * and signs, where script reads it as whitespace: one inside `void` could split it into two
+ * statements, the second a call of the page's own function, and a line break after `throw` is no
+ * script at all. The words are in the case script reads them; `Void(0)` calls a function of the
+ * page's. Any other body runs what it says, so it is judged as any action off the site; so is any
+ * other message, and a body that does not decode. The step call and the submission guard both judge
+ * by it.
  */
-export const noOpScriptCode = String.raw`(address) => {
+export const noOpScriptCode = String.raw`(address, formAction = false) => {
   let url;
   try {
     url = new URL(address);
@@ -136,7 +140,11 @@ export const noOpScriptCode = String.raw`(address) => {
   } catch {
     return false;
   }
-  return /^\s*(?:void\s*\(\s*0\s*\)|void\s+0)?\s*;?\s*$/.test(body);
+  return (
+    /^\s*(?:void\s*\(\s*0\s*\)|void\s+0)?\s*;?\s*$/.test(body) ||
+    (formAction === true &&
+      /^\s*throw[^\S\n\r\u2028\u2029]+new\s+Error\s*\(\s*(["'])React form unexpectedly submitted\.\1\s*\)\s*;?\s*$/.test(body))
+  );
 }`;
 
 /**
@@ -157,7 +165,7 @@ const controlReadCode = `(element) => {
   const actions = associated ? [formProperty("action")] : [];
   const methods = associated ? [formProperty("method")] : [];
   // Whether the form's own action is a script that does nothing, which sends nothing by itself.
-  const scriptAction = associated !== null && (${noOpScriptCode})(actions[0]);
+  const scriptAction = associated !== null && (${noOpScriptCode})(actions[0], true);
   // Whether the form or a control in it says GET itself: a bare form reads as GET too, but a
   // page that submits it with code sends nothing in an address.
   let explicitGet = associated ? (associated.getAttribute("method") ?? "").trim().toLowerCase() === "get" : false;
@@ -227,6 +235,13 @@ const controlReadCode = `(element) => {
 }`;
 
 /**
+ * Page code: the form a control belongs to, as `controlReadCode` reads it: its form owner, which a
+ * `form` attribute sets, else the form around it, for a control with no form owner of its own.
+ */
+const ownFormCode = `(element) =>
+  "form" in element && element.form instanceof HTMLFormElement ? element.form : element.closest("form")`;
+
+/**
  * Page code: `locate` finds a selector's one visible match across the primary tab's frames, and
  * `readControls` reads every control a call found. Where each sits is read from the element itself,
  * never from the frame the search started in: its own frame (or the first one above it with a real
@@ -235,6 +250,12 @@ const controlReadCode = `(element) => {
  * URL leaves only as `where` reads it; the destinations as found stay in the page
  * (`destinations`), for the guard. For the host's evidence it says which frame matched and how
  * many it searched, or, with no one visible match, each frame that matched and how often.
+ *
+ * A step's submit is found with the step's fields (`within`): when its selector has several
+ * visible matches, the one in the form every field sits in (`ownFormCode`) is its match, so a page
+ * that adds a second submit in another form, such as a sign-in with an app, still has one. With
+ * fields in no form or in more than one, or with none or several matches in their form, it has
+ * none, and the search says each frame that matched as before.
  */
 const findCode = `${clipCode}
 // Questions are explicit observed locators, never inferred from names or routes.
@@ -254,7 +275,36 @@ const readQuestion = async (frame, selector) => {
     return text === null ? undefined : { locator: visible[0], text };
   } catch { return undefined; }
 };
-const locate = async (selector, questionSelector) => {
+// Of several visible matches, the one in the form every field of the step sits in, else null.
+// Fields in another frame from each other, or a read that fails, have no one form.
+const inFieldsForm = async (visible, within) => {
+  const [first, ...others] = within;
+  if (first === undefined || !first.handle || others.some((field) => field.frame !== first.frame || !field.handle))
+    return null;
+  const read = { timeout: ${elementReadMs} };
+  try {
+    const shared = await first.locator.evaluate((element, others) => {
+      const ownForm = ${ownFormCode};
+      const form = ownForm(element);
+      return form !== null && others.every((other) => ownForm(other) === form);
+    }, others.map((field) => field.handle), read);
+    if (!shared) return null;
+    const inForm = [];
+    for (const found of visible) {
+      if (found.frame !== first.frame) continue;
+      const same = await found.locator.evaluate((element, [field]) => {
+        const ownForm = ${ownFormCode};
+        const form = ownForm(element);
+        return form !== null && form === ownForm(field);
+      }, [first.handle], read);
+      if (same) inForm.push(found);
+    }
+    return inForm.length === 1 ? inForm[0] : null;
+  } catch {
+    return null;
+  }
+};
+const locate = async (selector, questionSelector, within = []) => {
   const visible = [];
   const frames = primary.frames();
   const matches = [];
@@ -276,6 +326,10 @@ const locate = async (selector, questionSelector) => {
     if (count > 0) matches.push(match);
     if (count > 100) return { error: "ambiguous_match", searched: { frames: frames.length, matches } };
     for (const locator of shown) visible.push({ frame, locator });
+  }
+  if (visible.length > 1 && within.length > 0) {
+    const inForm = await inFieldsForm(visible, within);
+    if (inForm !== null) visible.splice(0, visible.length, inForm);
   }
   if (visible.length !== 1)
     return { error: visible.length === 0 ? "not_found" : "ambiguous_match", searched: { frames: frames.length, matches } };

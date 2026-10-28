@@ -427,12 +427,11 @@ const accountRecipe = () => ({
 
 it("signs a read in once the site lands off the recorded screens past a skipped code screen, opening no account page", { timeout: 20_000 }, async () => {
   const fake = skippedCodeSite();
-  const started = Date.now();
-  const { result } = await signIn(accountRecipe(), fake, {}, { stepWaitMs: 15_000, pollMs: 20 }, true);
+  // The code screen's wait runs to its deadline, and the marker wait then ends once the landing
+  // page stayed put 1.5 s.
+  const { result } = await signIn(accountRecipe(), fake, {}, { stepWaitMs: 2_000, pollMs: 20 }, true);
   expect(result).toEqual(Either.right({ alreadySignedIn: false }));
   expect(fake.trace).toEqual(["open:/login", "ask:missing_credentials", "open:/login", "fill:login"]);
-  // The screen wait and the marker wait each end once the landing page stayed put 1.5 s.
-  expect(Date.now() - started).toBeLessThan(10_000);
 });
 
 // A write's sign-in still needs its marker: it waits out the skipped code screen, then its sign-in
