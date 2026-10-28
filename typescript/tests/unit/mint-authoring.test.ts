@@ -919,6 +919,29 @@ it("has a write confirm from its first matching read-back, never from state befo
 });
 
 /*
+ * A write that issued a document confirmed it by reading it back, then found that the site sends
+ * one of the two requested files by email only and offers no way to fetch it. With every
+ * requested output required and blocked as the only ending for one the site lacks, the build
+ * ended with no tool although its one real write was done. After a verified write, it asks the
+ * caller once whether to publish with that output null and a reason, and never fills it in.
+ */
+it("has a write ask once to publish without an output the site does not offer, after its verified write", async () => {
+  const texts = await renderedTexts("typescript/authoring");
+  expect((texts.get("writes") ?? "").replace(/\s+/g, " ")).toContain(
+    "In a write build, after a verified write, if the site does not offer one output the request asks for, prefer asking the caller once with `request_input` whether to publish the tool with that output null and a reason field, rather than ending blocked; never invent the value.",
+  );
+  // The blocked ending for a capability the site lacks points to that ask first.
+  const guide = (texts.get("workspace/AGENTS.md") ?? "").replace(/\s+/g, " ");
+  expect(guide).toContain(
+    "never invent a value or substitute a different field. After a verified write, when the site does not offer one output the request asks for, the writes skill's ask whether to publish without it comes first.",
+  );
+  // So does the rule that never offers to leave out an output the request names.
+  expect(guide).toContain(
+    "A field, input or output the request itself names is never such a capability: support it, or end with `report_blocked` saying why the site cannot; never offer to leave it out, except one output the site does not offer, after a verified write, where the writes skill's ask whether to publish without it comes first.",
+  );
+});
+
+/*
  * A write marked opening a form and typing an address as commits, then waited only for the
  * address suggestions. For an address outside the area the site serves, the site showed a notice
  * instead, so the run timed out with two marks entered and reported a possible change when
@@ -1269,11 +1292,11 @@ it("renders the pinned standalone authoring", async () => {
     ["ad5b4f8391094f6d7c8ff4a480b071bb298807da9523971e0aaf7d719f152664", "testing"],
     ["2b559ad88157f28be2a054787f4c736cf192bb825760bdf3050c01a59d060ba8", "pagination"],
     ["4d05ffc26a395fafb591bb8ac593b79ae7450f21f26ac8709cbbe543fc2453df", "forms"],
-    ["ae84ba5cd3c71b639c886e82930f9c7f022b88583380ca208e13dd7788eb2170", "writes"],
+    ["60d94f1bc738726cfd31a34cd99b390e8ff7fcc9b6012d917061330c257ad22d", "writes"],
     ["d06f650fc09f74d3711e043da2303de97ced42c9ff2541d48ec28cd7e686519d", "cart"],
     ["14ec800f1f19a16e1a94c11e8a4e869e798bf597d86cd2369a51d32d66c9bc94", "caller-input"],
     ["fb7cd6b0929612a94dd6e0a3c54fa42e102ada77ccd83059fe818a01d8307cf0", "publication"],
-    ["1e47c5cd9ec720f140f39f3142a45e54e480bbf0754ca4f6e6b9fe43cfff46de", "workspace/AGENTS.md"],
+    ["2aa706abc7901c4e32ab803355f828f4b383422ac3a56c3959bd7f906c136b32", "workspace/AGENTS.md"],
     ["9501ae9c273d5d4db8976a544879f7aee44212c8a616b00e74263dcd3c593035", "workspace/README.md"],
   ]);
 });
@@ -1394,7 +1417,7 @@ it("renders the search URL fast path only when a host turns it on", async () => 
     [sha256(on.agents), "workspace/AGENTS.md"],
   ]).toStrictEqual([
     ["0386d3e23fb8cd652f7c64320b940b6a61c7ed9fb3315579fe5521c835789b42", "search"],
-    ["49d23786e5086bc594e03e16448f108fc36709558c04ab67a0f35c79db88a094", "workspace/AGENTS.md"],
+    ["878bdcfb464a8212767ba351343f754848b132ff638d7db4979e0281e253c048", "workspace/AGENTS.md"],
   ]);
   expect(on.digests.filter(([, name]) => name !== "search")).toStrictEqual(
     off.digests.filter(([, name]) => name !== "search"),

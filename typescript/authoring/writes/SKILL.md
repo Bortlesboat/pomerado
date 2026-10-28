@@ -596,6 +596,10 @@ Filling a form or an offline example
 is not the write. An unreadable step output never justifies a run either: the write
 publishes with its output recorded as unavailable.
 
+In a write build, after a verified write, if the site does not offer one output the request
+asks for, prefer asking the caller once with `request_input` whether to publish the tool with
+that output null and a reason field, rather than ending blocked; never invent the value.
+
 After a `not_published`, live `act` steps are open again while the write session is still
 open (a commit that recorded its confirmation stays done), on the same browser, still signed
 in: read `page.url()` first, and prefer not to sign in again. Only after a publication whose
