@@ -707,11 +707,14 @@ const submitWhenEnabled = (input: CallInput, progress: FillProgress, call: Autof
 /**
  * One field: a date's call fills it; any other field's call focuses it and binds its original node/document/frame; the host inserts its
  * value atomically. Undefined when the fill goes on to the next field, else the step's report.
+ * The focus call of the first of the step's code boxes (`boxes`) first empties every box that
+ * still holds something (`emptyBoxes`).
  */
 const fillField = (
   input: FillInput,
   progress: FillProgress,
   index: number,
+  boxes: readonly number[],
 ): Effect.Effect<AutofillStepReport | undefined> =>
   Effect.gen(function* () {
     const field = input.step.fields[index];
@@ -723,7 +726,12 @@ const fillField = (
       progress,
     )(
       format === undefined
-        ? { kind: "focus", index, bindingKey }
+        ? {
+            kind: "focus",
+            index,
+            bindingKey,
+            ...(index === boxes[0] ? { emptyBoxes: boxes } : {}),
+          }
         : { kind: "date", index, iso: value, format },
     );
     if (answered._tag === "Left")
@@ -919,11 +927,11 @@ export const fillAutofillStep = (input: FillInput): Effect.Effect<AutofillStepRe
     };
     const notice = yield* dismissNotice(input, progress);
     if (notice.refusal !== undefined) return notice.refusal;
+    const boxes = codeBoxes(step, input.values);
     for (let index = 0; index < step.fields.length; index++) {
-      const ended = yield* fillField(input, progress, index);
+      const ended = yield* fillField(input, progress, index, boxes);
       if (ended !== undefined) return ended;
     }
-    const boxes = codeBoxes(step, input.values);
     const typed =
       input.typedBefore === undefined ? undefined : [...input.typedBefore, ...input.values];
     const typeAgain = (fill: FillInput) =>
@@ -931,7 +939,7 @@ export const fillAutofillStep = (input: FillInput): Effect.Effect<AutofillStepRe
         progress.statuses.length = 0;
         progress.check = [];
         for (let index = 0; index < step.fields.length; index++) {
-          const ended = yield* fillField(fill, progress, index);
+          const ended = yield* fillField(fill, progress, index, boxes);
           if (ended !== undefined) return ended;
         }
         return yield* submitStep(fill, progress, boxes, typed);

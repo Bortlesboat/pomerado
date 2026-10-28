@@ -183,6 +183,13 @@ export type AutofillFillCall =
       readonly kind: "focus";
       readonly index: number;
       readonly bindingKey: string;
+      /**
+       * The step's code boxes, by field index, on the focus call of the row's first box: each one
+       * that holds something, as a refused code's digits may, is emptied first, last box first,
+       * with no focus and no key, so the page's own focus rules see an empty row before the host
+       * types the fresh code.
+       */
+      readonly emptyBoxes?: readonly number[];
     }
   | {
       readonly kind: "date";
@@ -665,6 +672,15 @@ const fillCallBody = (call: AutofillFillCall) => {
 const fieldLocated = located.fields[${call.index}];
 const question = fields[${call.index}].question;
 try {
+  // A row of code boxes that still holds a refused code is emptied first, last box first, by each
+  // input's own value setter and an input event: no focus and no key a widget moves the focus on.
+  // Lengths only, never a value.
+  for (const box of ${JSON.stringify([...(call.emptyBoxes ?? [])].reverse())})
+    await fields[box].locator.evaluate((element) => {
+      if (!(element instanceof HTMLInputElement) || element.value.length === 0) return;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(element, "");
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+    }, undefined, { timeout: ${elementReadMs} }, true);
   // Emptied only when it holds something: Playwright clears with a Delete key a page sees.
   if (await field.evaluate((element) => typeof element.value === "string" && element.value.length > 0, undefined, { timeout: ${elementReadMs} }))
     await field.fill("", { timeout: 5000 });
