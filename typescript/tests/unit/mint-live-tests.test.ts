@@ -1425,6 +1425,73 @@ it("says time ran out only when the attempt's end, not the batch's own cap, stop
   expect((await record(5 * 60_000)).outOfTime).toBe(true);
 });
 
+// A review that asked for evidence only a new live run could give, after the host's batch limit
+// left none, sent the build into a dead end. The record now tells the review no run is left.
+it("tells the publication review when no live test batch can run again", async () => {
+  const record = async (capped: boolean) => {
+    const { host, batches } = liveTestHost({});
+    const published = publications();
+    const f = await fixture(
+      (_request, index) =>
+        [
+          call("live_tests", runAll, "run"),
+          call("execute", example, "example"),
+          call("finish_build", finish, "finish"),
+        ][index] ?? prose(),
+      {
+        // A capped host raises its case limit past any deadline once its last batch ran.
+        liveTests: {
+          ...host,
+          get caseTimeoutMs() {
+            return capped && batches.length > 0 ? Number.MAX_SAFE_INTEGER : 60_000;
+          },
+        },
+        deadline: Deadline.after(30 * 60_000),
+        reviewAndExecute: completedExample,
+        publish: published.publish,
+      },
+      read,
+    );
+    const root = (f.workspace as unknown as { root: string }).root;
+    await writeWorkspace(root, { "src/tool.ts": toolSource, "test/cases.json": JSON.stringify(cases) });
+    await f.run();
+    expect(batches).toHaveLength(1);
+    return published.seen[0]?.liveTests as { noRunsLeft?: boolean; outOfTime?: boolean };
+  };
+  expect(await record(true)).toMatchObject({ noRunsLeft: true });
+  expect((await record(true)).outOfTime).toBeUndefined();
+  expect((await record(false)).noRunsLeft).toBeUndefined();
+});
+
+// Once time runs out, the review keeps each gap a note; the batch cap's narrowing rule must not
+// turn those gaps back into findings.
+it("leaves noRunsLeft out once the attempt ran out of time for live tests", async () => {
+  const stopped = { status: "inconclusive" as const, reason: "deadline" as const };
+  const { host } = liveTestHost({ "sort-price": stopped, nothing: emptyResults });
+  const published = publications();
+  const f = await fixture(
+    (_request, index) =>
+      [
+        call("live_tests", runAll, "run"),
+        call("execute", example, "example"),
+        call("finish_build", finish, "finish"),
+      ][index] ?? prose(),
+    {
+      liveTests: host,
+      deadline: Deadline.after(5 * 60_000),
+      reviewAndExecute: completedExample,
+      publish: published.publish,
+    },
+    read,
+  );
+  const root = (f.workspace as unknown as { root: string }).root;
+  await writeWorkspace(root, { "src/tool.ts": toolSource, "test/cases.json": JSON.stringify(cases) });
+  await f.run();
+  const record = published.seen[0]?.liveTests as { noRunsLeft?: boolean; outOfTime?: boolean };
+  expect(record.outOfTime).toBe(true);
+  expect(record.noRunsLeft).toBeUndefined();
+});
+
 it("never counts a case the site blocked on the browser's egress against the tool", async () => {
   const { host, batches } = liveTestHost({ "sort-price": { status: "inconclusive", reason: "site_block" } });
   const file = withPassing(cases, 1);

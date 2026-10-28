@@ -3,6 +3,7 @@ import type { GuardianSession, GuardianSessionOptions } from "./session.js";
 import { QuestionDecision } from "./question.js";
 import { anchorQuotedFindings, decodePublicationDecision } from "./publication.js";
 import {
+  answeredFindings,
   publicationContext,
   publicationDelta,
   publicationDeltaCounts,
@@ -51,8 +52,10 @@ import {
   guardianRefusals,
   PublicationFinding,
   PublicationReason,
+  ResponseRuling,
 } from "./review-contracts.js";
 import type {
+  FindingResponse,
   GuardianRefusalGround,
   PublicationScope,
   PublicationFileBlock,
@@ -122,6 +125,34 @@ export interface GuardianReviewOptions {
   ) => Effect.Effect<void>;
 }
 
+/**
+ * A publication decision with exactly one ruling for each answer the review carried, and none
+ * without an answer: a ruling on an answer it did not carry is dropped, and an answer left
+ * unruled, or ruled twice, fails to decode, so the review is told which answers need one.
+ */
+const withRulings = (
+  decision: GuardianDecision,
+  answered: readonly FindingResponse[],
+): Effect.Effect<GuardianDecision, ReviewFailure> => {
+  const ids = new Set(answered.map((response) => response.finding));
+  const rulings = (decision.responseRulings ?? []).filter((ruling) => ids.has(ruling.finding));
+  const { responseRulings: _rulings, ...rest } = decision;
+  const ruled = rulings.map((ruling) => ruling.finding);
+  const unruled = [...ids].filter((id) => !ruled.includes(id));
+  if (unruled.length > 0 || new Set(ruled).size !== ruled.length)
+    return Effect.fail(
+      new ReviewFailure({
+        code: "InvalidDecision",
+        failureDetail: failureDetail("guardian_dependency_failed", {
+          error: new Error(
+            `responseRulings must hold exactly one ruling for each answer in untrusted_finding_responses, by its finding id: ${[...ids].join(", ")}.`,
+          ),
+        }),
+      }),
+    );
+  return Effect.succeed(rulings.length === 0 ? rest : { ...rest, responseRulings: rulings });
+};
+
 const rationaleLimit = 4000;
 /**
  * A decision whose rationale is longer than the 4,000 characters it may hold keeps its first
@@ -164,6 +195,11 @@ export const GuardianDecision = Schema.Struct({
    * declared sign-in inputs (`decodePublicationDecision`). Reported, never blocking.
    */
   excusedSignInChoices: Schema.optional(Schema.Array(Schema.suspend(() => PublicationFinding))),
+  /**
+   * A publication review's ruling on each minter answer to a prior finding the request carried
+   * (`PendingExecution.findingResponses`), one per answer. Other kinds and requests have none.
+   */
+  responseRulings: Schema.optional(Schema.Array(Schema.suspend(() => ResponseRuling))),
   /**
    * A publication denial's one short sentence its caller may read: why the tool was not
    * published, in plain words, apart from the private rationale. Other kinds have none.
@@ -390,6 +426,13 @@ export interface PendingExecution {
   }[];
   /** Publication-only privacy scope selected by the host, never by the reviewer. */
   readonly publication?: PublicationScope;
+  /**
+   * Publication reviews only: the minter's answers to findings of the review that denied its
+   * last submission, screened, as its finish_build carried them. Untrusted call data, never
+   * authority. The review keeps only answers to a finding of the prior round it holds, and its
+   * decision rules on each of those.
+   */
+  readonly findingResponses?: readonly FindingResponse[];
   /** Host-selected mechanics and recorded chronology, not website claims or added authority. */
   readonly mintContext?: {
     /** Host authorization mechanics only; does not establish the source's read semantics. */
@@ -442,6 +485,14 @@ export interface PendingExecution {
       };
     };
     readonly browser: "not_opened" | "active" | "closed" | "unavailable";
+    /**
+     * Host fact, for execution and publication reviews: `signed_out` when the job holds no saved
+     * login and no host sign-in step ran in this attempt, so the session is established signed out;
+     * `signed_in` when the job holds a login or a host sign-in ran. A host that cannot tell leaves
+     * it out, and the review infers the session from the task and the steps as before. A host
+     * never sends `signed_out` for a job that holds a login.
+     */
+    readonly session?: "signed_out" | "signed_in";
     /**
      * Host fact, present only while no sign-in in this attempt is verified: the `{{secret.<id>}}`
      * handles answering a one-time or authenticator code question the agent asked after an
@@ -1710,6 +1761,11 @@ export const makeGuardian = (
           return withOutageRetry("execution", (run) =>
             review(run, pending, readSource, decodeExecution(pending)),
           );
+        // Only answers to a finding of the prior round reach the review, and each needs a ruling.
+        const answered = answeredFindings(priorPublicationRound(), pending.findingResponses);
+        const { findingResponses: _responses, ...unanswered } = pending;
+        const turnPending: PendingExecution =
+          answered.length === 0 ? unanswered : { ...unanswered, findingResponses: answered };
         const publicationDecoder =
           (text: (path: string) => Effect.Effect<string, ReviewFailure>) => (raw: unknown) =>
             anchorQuotedFindings(scope, raw, text).pipe(
@@ -1719,13 +1775,14 @@ export const makeGuardian = (
                   boundedRationale(anchored),
                 ),
               ),
+              Effect.flatMap((decision) => withRulings(decision, answered)),
             );
         // Where a quote sits never decides whether a decision decodes, so the probe reads no file
         // and puts each quoted finding on its whole file.
         return withOutageRetry("publication", (run) =>
           review(
             run,
-            pending,
+            turnPending,
             readSource,
             publicationDecoder((path) => wholeSource(readSource, path)),
             publicationDecoder(() => Effect.fail(new ReviewFailure({ code: "SourceUnavailable" }))),

@@ -321,7 +321,7 @@ const sharedGuidance: readonly (readonly [string, string])[] = [
   // when the build finds one, and neither skill names it as a gap.
   [
     "testing",
-    "Without a no-results answer, move on: it needs no `notTested` entry and no question;",
+    "Without a no-results answer, move on: it needs no `notTested` entry and no question.",
   ],
   ["publication", "and untested (such as a later page or another layout, live)."],
   // A part of the output that only some inputs show, such as a date a record has only in one
@@ -1289,17 +1289,17 @@ it("renders the pinned standalone authoring", async () => {
       .filter(([path]) => path !== "reference/publication-review.md")
       .map(([path, text]) => [sha256(text), `workspace/${path}`]),
   ]).toStrictEqual([
-    ["49aee4b7daf31e854d7328cca98525e21f59329c2e3e761162f2ee8684ca8196", "core"],
+    ["eb74a211ed72773dc87d3da192c75849901b0e6d3b409cf9c7a760e4e6328da4", "core"],
     ["933e2daac360d31beeeb2a8aeabcf22ca8512cc0272f321b047106f4a2055ab3", "search"],
     ["4484a13bc74caafbc22fcee1c10b36f13b21e116d24928ce369393d5a29e47ea", "auth"],
-    ["ad5b4f8391094f6d7c8ff4a480b071bb298807da9523971e0aaf7d719f152664", "testing"],
+    ["6e0abc8df202c1b26c29e5db48b23b0aaa2fa7dcb514d01250a7361a99543d35", "testing"],
     ["2b559ad88157f28be2a054787f4c736cf192bb825760bdf3050c01a59d060ba8", "pagination"],
-    ["9bdfbeacd87c777734e2f2fb3fc934676433a5e7881980000f2c25706ac6d66c", "forms"],
-    ["3a907b1f23f0f637f30adad9939751c9052a540fa182d14ed412bb071cac68d1", "writes"],
+    ["0f45b38331f51d0d503a26806d8a96b545a6dd4ca03eddce2c585debf2c569a2", "forms"],
+    ["ecaf28ded2af41284590a1d5de734e1a6679533ffbcecf764b08d2cdde41aad4", "writes"],
     ["d06f650fc09f74d3711e043da2303de97ced42c9ff2541d48ec28cd7e686519d", "cart"],
     ["b6dd72d69c30ac9a1818ac1baeae48e701cd318f04d11e04ef8c03d812b91a16", "caller-input"],
-    ["f9d51b7d4ba9e55fe3972a8cb05e539eed56de3d650c9884c19ebd9ce3d41c24", "publication"],
-    ["a319737c69647bb215186a1ab88fb61edfff11c6cc6cec6fb582b490d1bae10a", "workspace/AGENTS.md"],
+    ["16a7758448245bfdfa358b21315a3d27a7d28a9d1b8e6253726afe2808fc6093", "publication"],
+    ["0cfb4cb36e0f5c30d52786c27ba02141eac4ec4d0ece44a1d22365f740831a3b", "workspace/AGENTS.md"],
     ["9501ae9c273d5d4db8976a544879f7aee44212c8a616b00e74263dcd3c593035", "workspace/README.md"],
   ]);
 });
@@ -1420,7 +1420,7 @@ it("renders the search URL fast path only when a host turns it on", async () => 
     [sha256(on.agents), "workspace/AGENTS.md"],
   ]).toStrictEqual([
     ["0386d3e23fb8cd652f7c64320b940b6a61c7ed9fb3315579fe5521c835789b42", "search"],
-    ["d10403f4fe86cdbe179b2ef53376a14c053fdbe7d151b31fb18018843b1141d5", "workspace/AGENTS.md"],
+    ["99f0df56026e198df1d2d6e8ba3ab2c88b1e3aa3058f6d41d20b5cd248a0d7c2", "workspace/AGENTS.md"],
   ]);
   expect(on.digests.filter(([, name]) => name !== "search")).toStrictEqual(
     off.digests.filter(([, name]) => name !== "search"),

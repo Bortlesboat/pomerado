@@ -1,7 +1,7 @@
 import { Effect, Option, Schema } from "effect";
 import { publicDefinitionPath } from "../guardian/publication.js";
 import type { PendingExecution, ReviewTurn } from "../guardian/review.js";
-import type { PublicationScope } from "../guardian/review-contracts.js";
+import type { FindingResponse, PublicationScope } from "../guardian/review-contracts.js";
 import {
   inlineLocalRefs,
   UnresolvedSchemaReference,
@@ -566,6 +566,8 @@ export type PublicationReview = (request: {
    * `.agents/<name>/SKILL.md`. They stay out of the publication index, so no finding names one.
    */
   readonly references?: ReadonlyMap<string, string>;
+  /** The minter's answers to the last denial's findings, screened (`PendingExecution`). */
+  readonly findingResponses?: readonly FindingResponse[];
 }) => Effect.Effect<string, MintFailure>;
 
 /** What one finish_build would publish, and the evidence it is reviewed against. */
@@ -591,6 +593,8 @@ export interface PublicationCandidate {
   readonly write: boolean;
   /** Files the review may read beside its evidence (see `PublicationReview`). */
   readonly references?: ReadonlyMap<string, string>;
+  /** The minter's answers to the last denial's findings, screened (`PendingExecution`). */
+  readonly findingResponses?: readonly FindingResponse[];
 }
 
 /**
@@ -856,6 +860,9 @@ export const reviewPublication = (review: PublicationReview, candidate: Publicat
       ...(candidate.baseline === undefined ? {} : { baseline: candidate.baseline }),
       evidence: new Map([[publicDefinitionPath, candidate.definition], ...candidate.evidence]),
       ...(candidate.references === undefined ? {} : { references: candidate.references }),
+      ...(candidate.findingResponses === undefined
+        ? {}
+        : { findingResponses: candidate.findingResponses }),
     });
     if (unlisted.length === 0 && missing.inputs.length === 0 && missing.outputs.length === 0)
       return reviewId;

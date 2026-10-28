@@ -234,7 +234,7 @@ it("allows a blocked report that names the caller input at fault and why", async
     ),
   );
   expect(reviewPolicyOf(requests[0])).toContain(
-    'or when it asks the user for anything; the agent then revises or withdraws it. A report that starts "Caller input error:" is allowed when it names the input value at fault and why the site cannot fulfil it, in the site\'s own words where the site showed any. Saying what kind of value would work, such as a future date or a neighborhood the site lists, is part of that reason, not a request to the user. The rules below apply to questions, not to this report.\n',
+    'or when it asks the user for anything; the agent then revises or withdraws it. A report that starts "Caller input error:" is allowed when it names the input value at fault and why the site cannot fulfil it, in the site\'s own words where the site showed any. Saying what kind of value would work, such as a future date or a neighborhood the site lists, is part of that reason, not a request to the user.',
   );
 });
 
@@ -371,6 +371,48 @@ it("gives the question review the host's publication refusals as trusted evidenc
     question_review: { publicationDecisions?: unknown };
   };
   expect(input.question_review.publicationDecisions).toEqual([refusal]);
+});
+
+// A builder whose publication finding left the owner a choice (keep the claim and get evidence,
+// or drop it) had its question to the owner rejected, because the review never saw the finding.
+it("gives the question review the publication finding a question is about, and returns its label", async () => {
+  const finding = {
+    id: "f0123456789",
+    category: "unsupported_claim",
+    file: "publication/definition.json",
+    explanation: "No passing case applies the color filter the definition claims.",
+  } as const;
+  const requests = scripted([
+    [message({ outcome: "allow_business", rationale: "The owner's choice.", label: "finding_choice" })],
+    [message({ outcome: "reword", rationale: "Say which claim.", label: "not_a_listed_code" })],
+  ]);
+  const candidate = await Effect.runPromise(
+    questionForReview(
+      {
+        questions: [
+          {
+            id: "color_filter",
+            type: "choice",
+            prompt: "Keep the color filter and test it, or leave it out?",
+            options: [
+              { id: "keep", label: "Keep it" },
+              { id: "drop", label: "Leave it out" },
+            ],
+          },
+        ],
+      },
+      { credentialsAvailable: false, finding },
+      (text) => Effect.succeed(text),
+    ),
+  );
+  const guardian = makeGuardian(makeOpenAIReviewer("{{ tenant_policy_config }}", false, native));
+  const allowed = await Effect.runPromise(guardian.reviewQuestion(pending, candidate, unreadable));
+  const input = JSON.parse(userText(requests[0])) as { question_review: { finding?: unknown } };
+  expect(input.question_review.finding).toEqual(finding);
+  expect(allowed.decision.label).toBe("finding_choice");
+  // A code the policy does not list still decodes, as other, rather than failing the review.
+  const reworded = await Effect.runPromise(guardian.reviewQuestion(pending, candidate, unreadable));
+  expect(reworded.decision).toMatchObject({ outcome: "reword", label: "other" });
 });
 
 // A blocked report that cited an earlier denial was judged without it: the denial survived only in

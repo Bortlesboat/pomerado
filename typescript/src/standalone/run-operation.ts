@@ -1,10 +1,19 @@
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { createLocalWorkspace } from "../execution/local-workspace.js";
 import { seedLocalRuntime } from "../execution/local-runtime-assets.js";
-import { runLocalOperation } from "../execution/local-operation.js";
-import { localFileReferences, makeLocalFileHook } from "../execution/local-files.js";
+import { LocalOperationFailure, runLocalOperation } from "../execution/local-operation.js";
+import {
+  localFileReferences,
+  makeLocalFileHook,
+  openLocalFile,
+} from "../execution/local-files.js";
 import { localDownloads } from "../execution/local-downloads.js";
-import { makeRunFiles } from "../runtime/file-transfer.js";
+import {
+  limitedInputFiles,
+  makeRunFiles,
+  siteFileRefusal,
+  siteFileRefusalMessage,
+} from "../runtime/file-transfer.js";
 import { makeRunDialogDecider, watchingUnanswered } from "../inputs/dialog.js";
 import { draftQuestionDeclarations } from "../mint/draft-questions.js";
 import { noIncidents } from "../runtime/incidents.js";
@@ -18,6 +27,41 @@ import { admitArtifactCursor, sealArtifactOutput } from "./list-cursors.js";
 import type { StandaloneSession } from "./session.js";
 import { requestSite } from "./request-context.js";
 import { beforeOperationFailure, returnedRun, runOutcomeFailure } from "./run-report.js";
+
+/**
+ * Checks each file the caller's input names against the limits the tool declares for its input
+ * (`fileInputWithin`), from the file's size and name alone. A file outside them fails the run as
+ * a refused input, before the sign-in or any page load, so a write never stops partway for a
+ * file the site would refuse. A file the host can't open is left to `files.place`, which refuses
+ * it as before.
+ */
+const admitDeclaredFiles = (
+  artifact: MintArtifact,
+  request: Pick<PomeradoRequest, "input"> & { readonly effect?: "read" | "write" },
+) =>
+  Effect.forEach(
+    limitedInputFiles(artifact.inputSchema, request.input ?? {}),
+    ({ path, reference, limits }) =>
+      Effect.option(openLocalFile(reference)).pipe(
+        Effect.flatMap((source) => {
+          const reason = Option.isSome(source) ? siteFileRefusal(limits, source.value) : undefined;
+          if (Option.isNone(source) || reason === undefined) return Effect.void;
+          return Effect.fail(
+            runOutcomeFailure(request.effect, "operation")(
+              new LocalOperationFailure(
+                siteFileRefusalMessage(path, limits, { reason, size: source.value.size }),
+                { effect: "not_sent", commits: [] },
+                "InvalidInput",
+                "InvalidInput",
+                [{ path, issue: "invalid" }],
+                { refusal: { field: path, kind: reason } },
+              ),
+            ),
+          );
+        }),
+      ),
+    { discard: true },
+  );
 
 /**
  * Runs an already-built artifact. Guardian reviewed its source when it was minted, so a run makes
@@ -39,6 +83,8 @@ export const runOperation = (
     // A cursor this host did not sign for this tool and these inputs, or one past its hour, ends
     // the run here, before the sign-in or any page load.
     const list = yield* admitArtifactCursor(session, artifact, siteOrigin, request);
+    // So does a caller's file outside the limits the tool declares for its input.
+    yield* admitDeclaredFiles(artifact, request);
     const workspace = yield* createLocalWorkspace();
     yield* seedLocalRuntime(workspace);
     const sources = artifact.files.map(({ path, content }) => [path, content] as const);
