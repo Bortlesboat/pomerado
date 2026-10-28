@@ -473,3 +473,107 @@ export const rankByWords = (query: string, texts: readonly string[]): number[] =
  */
 export const readBackMatches = (shown: string, wanted: string): boolean =>
   sameText(shown, wanted) || (rankByWords(wanted, [shown])[0] ?? 0) >= 0.7;
+
+/**
+ * The ways people commonly write `value`, itself first: each word or phrase that has a usual other
+ * written form is tried in each of them, such as St for Street or Saint, Ave for Avenue, Intl for
+ * International, Ctr for Center or Centre, Mt for Mount, Ft for Fort, 5th for Fifth (First to
+ * Twentieth) and & for and, either way. A US state's or Canadian province's code and name, such
+ * as IL and Illinois, NY and New York, or DC, D.C. and Washington DC, count only where a place
+ * ends the value, alone or before a postal code or country, so the word "in" or "me" inside a
+ * name never reads as a state. Every form but the first is folded as `foldChoiceText` folds,
+ * lower case and with `.`, `,` and hyphens between letters read as spaces. At most 32 forms.
+ *
+ * It is pure and self-contained: the page code of `pickerCode` embeds this same function, so a
+ * picker tries each form of the caller's value against the site's options.
+ */
+export const spellingsOf = (value: string): string[] => {
+  const raw = String(value ?? "").replace(/\s+/gu, " ").trim();
+  if (raw === "") return [];
+  const words = raw
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/gu, "")
+    .normalize("NFC")
+    .toLowerCase()
+    .replace(/(?<!\p{N})['‘’ʼ](?!\p{N})/gu, "")
+    .replace(/&/gu, " & ")
+    .replace(/(?<!\p{N})[.,\-‐‑‒–—](?!\p{N})/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
+  const ordinals = [
+    "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth",
+    "eleventh", "twelfth", "thirteenth", "fourteenth", "fifteenth", "sixteenth", "seventeenth",
+    "eighteenth", "nineteenth", "twentieth",
+  ];
+  const suffix = (n: number) => (n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th");
+  // Forms of one word or phrase that read alike anywhere in a value.
+  const anywhere: readonly (readonly string[])[] = [
+    ["st", "street"],
+    ["st", "saint"],
+    ["ave", "avenue"],
+    ["intl", "international"],
+    ["ctr", "center", "centre"],
+    ["mt", "mount"],
+    ["ft", "fort"],
+    ["&", "and"],
+    ...ordinals.map((word, index) => [`${index + 1}${suffix(index + 1)}`, word]),
+  ];
+  // A place's code and names, which read alike only where a place ends the value.
+  const places: readonly (readonly string[])[] = [
+    "al alabama|ak alaska|az arizona|ar arkansas|ca california|co colorado|ct connecticut|de delaware",
+    "fl florida|ga georgia|hi hawaii|id idaho|il illinois|in indiana|ia iowa|ks kansas|ky kentucky",
+    "la louisiana|me maine|md maryland|ma massachusetts|mi michigan|mn minnesota|ms mississippi",
+    "mo missouri|mt montana|ne nebraska|nv nevada|nh new hampshire|nj new jersey|nm new mexico",
+    "ny new york|nc north carolina|nd north dakota|oh ohio|ok oklahoma|or oregon|pa pennsylvania",
+    "ri rhode island|sc south carolina|sd south dakota|tn tennessee|tx texas|ut utah|vt vermont",
+    "va virginia|wa washington|wv west virginia|wi wisconsin|wy wyoming",
+    "dc d c washington dc washington d c district of columbia",
+    "ab alberta|bc british columbia|mb manitoba|nb new brunswick|nl newfoundland and labrador",
+    "ns nova scotia|nt northwest territories|nu nunavut|on ontario|pe prince edward island",
+    "qc quebec|sk saskatchewan|yt yukon",
+  ]
+    .flatMap((line) => line.split("|"))
+    .map((entry) =>
+      entry.startsWith("dc ")
+        ? ["dc", "d c", "washington dc", "washington d c", "district of columbia"]
+        : [entry.slice(0, 2), entry.slice(3)],
+    );
+  // A place ends the value when only postal codes or a country follow it.
+  const tail = /^(?:\p{N}{3,}(?:-\p{N}+)?|[a-z]\p{N}[a-z]|\p{N}[a-z]\p{N}|usa|us|canada)$/u;
+  const endsValue = (end: number) => words.slice(end).every((word) => tail.test(word));
+  const holds = (at: number, phrase: readonly string[]) =>
+    phrase.every((word, offset) => words[at + offset] === word);
+  // Each form of the longest word or phrase with other forms that starts at `at`.
+  const formsAt = (at: number): { readonly length: number; readonly forms: string[][] } => {
+    let best: { length: number; forms: string[][] } = { length: 1, forms: [[words[at] ?? ""]] };
+    const consider = (groups: readonly (readonly string[])[], place: boolean) => {
+      for (const group of groups)
+        for (const form of group) {
+          const phrase = form.split(" ");
+          if (phrase.length < best.length || !holds(at, phrase)) continue;
+          if (place && !endsValue(at + phrase.length)) continue;
+          const others = group.filter((other) => other !== form).map((other) => other.split(" "));
+          if (phrase.length > best.length) best = { length: phrase.length, forms: [phrase] };
+          for (const other of others)
+            if (!best.forms.some((known) => known.join(" ") === other.join(" "))) best.forms.push(other);
+        }
+    };
+    consider(anywhere, false);
+    consider(places, true);
+    return best;
+  };
+  const forms: string[] = [];
+  const walk = (at: number, spelled: readonly string[]) => {
+    if (forms.length >= 32) return;
+    if (at >= words.length) {
+      forms.push(spelled.join(" "));
+      return;
+    }
+    const { length, forms: each } = formsAt(at);
+    for (const form of each) walk(at + length, [...spelled, ...form]);
+  };
+  walk(0, []);
+  return [...new Set([raw, ...forms.slice(1)])];
+};

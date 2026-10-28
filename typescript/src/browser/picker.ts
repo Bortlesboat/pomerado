@@ -1,8 +1,8 @@
 import { Schema } from "effect";
 import { timeoutDefaults } from "../runtime/deadline.js";
 import { operationErrors } from "../runtime/operation-failure.js";
-import { foldChoiceText } from "../runtime/text.js";
-import { pickerRanks, rankChoices } from "./picker-rank.js";
+import { foldChoiceText, rankByWords, spellingsOf } from "../runtime/text.js";
+import { closestFirst, pickerRanks, rankChoices } from "./picker-rank.js";
 
 /**
  * The page's state for one picker, read in the control's own frame: every `phase` runs this one
@@ -527,8 +527,12 @@ const pickerPageCode = String.raw`(element, args) => {
  * letters only, begin the value's or begin with them, the shorter of five or more letters, such as
  * Dentistry for Dentist (rank `stem`). An option's names are its text, first line, accessible name,
  * `title` and, for a table row, each cell, and its value is `data-value`, `value`, `data-id`,
- * `data-key` or `data-code` (put others first with `options.valueAttributes`). Two options at the
- * best rank are ambiguous; an "Add ..." or "Create ..." row is never matched.
+ * `data-key` or `data-code` (put others first with `options.valueAttributes`). At each rank, once
+ * the value as given matches no name there, its other written forms (`spellingsOf`: 5th and Fifth,
+ * St and Street or Saint, Ave and Avenue, a state's code and name where a place ends the value,
+ * and the like) are tried against names, so Fifth Avenue for 5th Avenue outranks an option that
+ * merely holds every word. Two options at the best rank are ambiguous; an "Add ..." or "Create
+ * ..." row is never matched.
  *
  * Waits follow the page, never a fixed pause: after typing, the options count once no loading
  * sign shows (a busy region, an indeterminate progress bar, a loading or spinner class, a
@@ -570,7 +574,8 @@ const pickerPageCode = String.raw`(element, args) => {
  * A caller's value the picker lacks is not an error of the page: they return
  * `{ picked: false, reason, wanted, available, matches }`, where `reason` is `option_missing`,
  * `option_ambiguous` (`matches` lists the options that tie) or `option_disabled`, and
- * `available` every enabled option it listed. Decode with `PickOutcome` and throw
+ * `available` every enabled option it listed, up to 100, for `option_missing` those closest to the
+ * value first (`rankByWords`). Decode with `PickOutcome` and throw
  * `pickRefusal(outcome, field)` (`InvalidInput` with `field` and `available`, which for options
  * that tie is `matches`), or ask the caller to choose among `matches`. In a tool that takes the
  * first of options that tie instead (each tool decides), pass `tie: "first"`, so the picker takes
@@ -592,7 +597,10 @@ export const pickerCode = String.raw`
 const pickerFailure = (reason) => Object.assign(new Error(reason), { name: "PickerFailure" });
 const pickerFold = ${String(foldChoiceText)};
 const pickerRankChoices = ${String(rankChoices)};
-const pickerRank = (s, list, wanted) => pickerRankChoices(list, wanted, pickerFold, { leading: s.tie === true, stem: s.options.stem === true });
+const pickerSpellings = ${String(spellingsOf)};
+const pickerRankByWords = ${String(rankByWords)};
+const pickerClosestFirst = ${String(closestFirst)};
+const pickerRank = (s, list, wanted) => pickerRankChoices(list, wanted, pickerFold, { leading: s.tie === true, stem: s.options.stem === true, spellings: pickerSpellings });
 const pickerPage = ${pickerPageCode};
 const pickerLimits = Object.freeze(${JSON.stringify({
   timeout: 10_000,
@@ -883,8 +891,10 @@ const pickerCollect = async (s, scan, wanted) => {
   return { list, ranking, scan: latest, complete: complete || seen.size >= 2000 };
 };
 // The enabled options as shown, never a native select's empty-valued prompt such as "Choose...".
-const pickerAvailable = (list) =>
-  [...new Set(list.filter((option) => !option.disabled && !(option.native && option.value === "")).map((option) => option.label).filter(Boolean))].slice(0, 100);
+// For a value it lacks (wanted given), those closest to it first, so they survive the cap.
+const pickerClosest = (labels, wanted) => pickerClosestFirst([...new Set(labels)], wanted?.[0] ?? "", pickerRankByWords).slice(0, 100);
+const pickerAvailable = (list, wanted) =>
+  pickerClosest(list.filter((option) => !option.disabled && !(option.native && option.value === "")).map((option) => option.label).filter(Boolean), wanted);
 // Options that tie, each as the caller can tell it apart: its label, else its whole text, else
 // that and its value.
 const pickerMatches = (options) => {
@@ -908,7 +918,7 @@ const pickerOutcome = (found, wanted, tie = false) => {
       picked: false,
       reason,
       wanted: wanted[0],
-      available: pickerAvailable(list),
+      available: pickerAvailable(list, reason === "option_missing" ? wanted : undefined),
       matches: ranking.status === "ambiguous" ? pickerMatches(tied) : ranking.status === "disabled" ? [list[ranking.index].label] : [],
     },
   };
@@ -988,7 +998,7 @@ const pickerQuery = async (s, field, wanted, seenAvailable = []) => {
       }
       lastFound = found;
       if (found.ranking.status !== "missing") return { found, field };
-      available.push(...pickerAvailable(found.list));
+      available.push(...pickerAvailable(found.list, wanted));
       // A tag input that may create values and shows nothing for the text is a free-entry field.
       if (!reacted && s.options.create) break;
       if (!reacted && step < 2) continue;
@@ -1011,7 +1021,7 @@ const pickerQuery = async (s, field, wanted, seenAvailable = []) => {
     }
   }
   const found = lastFound ?? { ranking: { status: "missing" }, list: [] };
-  return { found, field, available: [...new Set(available)].slice(0, 100) };
+  return { found, field, available: pickerClosest(available, wanted) };
 };
 const pickerOpen = async (s) => {
   await pickerEval(s, "snapshot");
@@ -1031,7 +1041,7 @@ const pickerFind = async (s, wanted) => {
     const { found, field, available } = await pickerQuery(s, s.control, wanted);
     const outcome = pickerOutcome(found, wanted, s.tie);
     if (outcome.status === "refused" && available && outcome.refusal.reason === "option_missing")
-      outcome.refusal.available = [...new Set([...outcome.refusal.available, ...available])].slice(0, 100);
+      outcome.refusal.available = pickerClosest([...outcome.refusal.available, ...available], wanted);
     return { ...outcome, field, scan: found.scan };
   }
   const scan = await pickerOpen(s);
@@ -1041,10 +1051,10 @@ const pickerFind = async (s, wanted) => {
   // A list too long to read whole is narrowed with its search box, or not judged at all.
   if (!found.complete && search === null) throw pickerLoadingFailure(s, found.scan, s.markedAt, undefined, found.list.length);
   if (strong || search === null) return { ...pickerOutcome(found, wanted, s.tie), field: s.control, scan: found.scan, popupKind: scan.kind };
-  const queried = await pickerQuery(s, search, wanted, pickerAvailable(found.list));
+  const queried = await pickerQuery(s, search, wanted, pickerAvailable(found.list, wanted));
   const outcome = pickerOutcome(queried.found.ranking.status === "missing" && found.complete && found.ranking.status !== "missing" ? found : queried.found, wanted, s.tie);
   if (outcome.status === "refused" && queried.available && outcome.refusal.reason === "option_missing")
-    outcome.refusal.available = [...new Set([...outcome.refusal.available, ...queried.available])].slice(0, 100);
+    outcome.refusal.available = pickerClosest([...outcome.refusal.available, ...queried.available], wanted);
   return { ...outcome, field: search, scan: queried.found.scan ?? found.scan, popupKind: scan.kind };
 };
 // Brings the chosen option into the rendered list (a list that renders as it scrolls may have
@@ -1303,7 +1313,7 @@ const pickerChips = (s) => pickerEval(s, "chips", { chips: s.options.chips ?? nu
 // punctuation), never because its name holds the value as a word or shares its stem: "Blue Grey"
 // is not "Blue".
 const pickerChipIs = (chips, wanted) => {
-  const ranking = pickerRankChoices(chips, wanted, pickerFold);
+  const ranking = pickerRankChoices(chips, wanted, pickerFold, { spellings: pickerSpellings });
   return ranking.status === "picked" && ["exact", "normalized", "folded"].includes(ranking.rank) ? ranking : null;
 };
 const pickValues = async (control, values, options = {}) => {

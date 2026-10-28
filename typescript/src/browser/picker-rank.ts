@@ -40,7 +40,11 @@ export type PickerRanking =
  * Options at the first rank that matches decide: one option (by key) is picked, or reported
  * disabled when every copy of it is; two or more are ambiguous, never guessed. A weaker rank never
  * overrules a stronger one, so a disabled exact match is not replaced by a looser one. Without
- * `options.leading`, no option ranks `leading`; without `options.stem`, none ranks `stem`.
+ * `options.leading`, no option ranks `leading`; without `options.stem`, none ranks `stem`. With
+ * `options.spellings`, such as `spellingsOf`, each rank also tries the other written forms of a
+ * spelling against option names, never values, once the spellings as given match nothing at that
+ * rank: so Fifth Avenue for 5th Avenue matches as a name before any option merely holding every
+ * word, while a spelling that already matches at a rank is never overruled by one of its forms.
  *
  * It is pure and self-contained: the page code of `pickerCode` embeds this same function with
  * `fold` set to `foldChoiceText`.
@@ -49,7 +53,11 @@ export const rankChoices = (
   choices: readonly PickerChoice[],
   wanted: readonly string[],
   fold: (text: string) => string,
-  options: { readonly leading?: boolean; readonly stem?: boolean } = {},
+  options: {
+    readonly leading?: boolean;
+    readonly stem?: boolean;
+    readonly spellings?: (text: string) => readonly string[];
+  } = {},
 ): PickerRanking => {
   const squash = (text: string) => String(text ?? "").replace(/\s+/gu, " ").trim();
   const lower = (text: string) => squash(text).toLowerCase();
@@ -65,77 +73,120 @@ export const rankChoices = (
     return short.length >= 5 && long.startsWith(short);
   };
   const spellings = wanted.map(squash).filter((spelling) => spelling !== "");
-  const tests: readonly (readonly [PickerRank, (choice: PickerChoice) => boolean])[] = [
-    ["exact", (choice) => choice.names.some((name) => spellings.includes(squash(name)))],
-    ["exact", (choice) => choice.value !== "" && spellings.includes(squash(choice.value))],
+  // The other written forms of the spellings, such as Fifth for 5th, which only names match.
+  const others = [
+    ...new Set(
+      spellings
+        .flatMap((spelling) => options.spellings?.(spelling) ?? [])
+        .map(squash)
+        .filter((form) => form !== "" && !spellings.includes(form)),
+    ),
+  ];
+  type Test = (choice: PickerChoice, list: readonly string[]) => boolean;
+  const tests: readonly (readonly [PickerRank, Test, boolean])[] = [
+    ["exact", (choice, list) => choice.names.some((name) => list.includes(squash(name))), true],
+    ["exact", (choice, list) => choice.value !== "" && list.includes(squash(choice.value)), false],
     ...(
       [
         ["normalized", lower],
         ["folded", fold],
       ] as const
     ).flatMap(([rank, form]) => {
-      const forms = new Set(spellings.map(form).filter((spelling) => spelling !== ""));
+      const forms = (list: readonly string[]) =>
+        new Set(list.map(form).filter((spelling) => spelling !== ""));
       return [
-        [rank, (choice: PickerChoice) => choice.names.some((name) => forms.has(form(name)))],
-        [rank, (choice: PickerChoice) => choice.value !== "" && forms.has(form(choice.value))],
+        [rank, (choice: PickerChoice, list: readonly string[]) => {
+          const set = forms(list);
+          return choice.names.some((name) => set.has(form(name)));
+        }, true],
+        [rank, (choice: PickerChoice, list: readonly string[]) =>
+          choice.value !== "" && forms(list).has(form(choice.value)), false],
       ] as const;
     }),
     ...(options.leading === true
       ? ([
           [
             "leading",
-            (choice: PickerChoice) => {
-              const forms = new Set(spellings.map(fold).filter((spelling) => spelling !== ""));
+            (choice: PickerChoice, list: readonly string[]) => {
+              const forms = new Set(list.map(fold).filter((spelling) => spelling !== ""));
               return choice.names.some((name) => {
                 // The first comma that is not a thousands separator, as in 1,000.
                 const comma = String(name ?? "").search(/(?<!\p{N}),|,(?!\p{N})/u);
                 return comma > 0 && forms.has(fold(String(name).slice(0, comma)));
               });
             },
+            true,
           ],
         ] as const)
       : []),
     [
       "words",
-      (choice) => {
-        const parts = spellings.map(phrase).filter((part) => part.trim() !== "");
+      (choice, list) => {
+        const parts = list.map(phrase).filter((part) => part.trim() !== "");
         return choice.names.some((name) => parts.some((part) => phrase(name).includes(part)));
       },
+      true,
     ],
     [
       "allWords",
-      (choice) => {
-        const wants = spellings.map(words).filter((list) => list.length > 0);
+      (choice, list) => {
+        const wants = list.map(words).filter((each) => each.length > 0);
         return choice.names.some((name) => {
           const have = new Set(words(name));
           return wants.some((want) => want.every((word) => have.has(word)));
         });
       },
+      true,
     ],
     [
       "stem",
-      (choice) => {
+      (choice, list) => {
         if (options.stem !== true) return false;
-        const wants = spellings.map(words).filter((list) => list.length > 0);
+        const wants = list.map(words).filter((each) => each.length > 0);
         return choice.names.some((name) => {
           const have = words(name);
           return wants.some((want) => want.length === have.length && want.every((word, at) => pairs(word, have[at] ?? "")));
         });
       },
+      true,
     ],
   ];
-  for (const [rank, test] of tests) {
-    const matched = choices.flatMap((choice, index) => (test(choice) ? [index] : []));
-    if (matched.length === 0) continue;
-    const keys = [...new Set(matched.map((index) => choices[index]?.key))];
-    if (keys.length > 1) {
-      const indexes = keys.map((key) => matched.find((index) => choices[index]?.key === key) ?? 0);
-      return { status: "ambiguous", indexes, rank };
+  for (const [rank, test, byName] of tests) {
+    // At each rank the spellings as given decide first; their other forms only when they match
+    // nothing there, and never an option's value.
+    const lists = byName && others.length > 0 ? [spellings, others] : [spellings];
+    for (const list of lists) {
+      const matched = choices.flatMap((choice, index) => (test(choice, list) ? [index] : []));
+      if (matched.length === 0) continue;
+      const keys = [...new Set(matched.map((index) => choices[index]?.key))];
+      if (keys.length > 1) {
+        const indexes = keys.map((key) => matched.find((index) => choices[index]?.key === key) ?? 0);
+        return { status: "ambiguous", indexes, rank };
+      }
+      const enabled = matched.find((index) => choices[index]?.disabled === false);
+      return enabled === undefined
+        ? { status: "disabled", index: matched[0] ?? 0, rank }
+        : { status: "picked", index: enabled, rank };
     }
-    const enabled = matched.find((index) => choices[index]?.disabled === false);
-    return enabled === undefined
-      ? { status: "disabled", index: matched[0] ?? 0, rank }
-      : { status: "picked", index: enabled, rank };
   }
   return { status: "missing" };
+};
+
+/**
+ * `labels` with those closest to `query` first, by `score` (such as `rankByWords`, which scores
+ * every label against the query at once), keeping the given order among equal scores, so the
+ * options nearest a value the picker lacks survive a cap on how many a refusal lists. An empty
+ * query keeps the given order.
+ */
+export const closestFirst = (
+  labels: readonly string[],
+  query: string,
+  score: (query: string, texts: readonly string[]) => readonly number[],
+): string[] => {
+  if (String(query ?? "").trim() === "" || labels.length < 2) return [...labels];
+  const scores = score(query, labels);
+  return labels
+    .map((label, index) => ({ label, index, score: scores[index] ?? 0 }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map(({ label }) => label);
 };

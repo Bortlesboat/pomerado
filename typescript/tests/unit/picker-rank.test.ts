@@ -1,8 +1,8 @@
 import { Schema } from "effect";
 import { describe, expect, test } from "vitest";
 import { PickOutcome, pickRefusal } from "../../src/browser/picker.js";
-import { rankChoices, type PickerChoice } from "../../src/browser/picker-rank.js";
-import { foldChoiceText } from "../../src/runtime/text.js";
+import { closestFirst, rankChoices, type PickerChoice } from "../../src/browser/picker-rank.js";
+import { foldChoiceText, rankByWords, spellingsOf } from "../../src/runtime/text.js";
 
 const choice = (names: string | readonly string[], value = "", disabled = false): PickerChoice => {
   const list = typeof names === "string" ? [names] : names;
@@ -12,6 +12,8 @@ const rank = (choices: readonly PickerChoice[], ...wanted: string[]) =>
   rankChoices(choices, wanted, foldChoiceText);
 const stemRank = (choices: readonly PickerChoice[], ...wanted: string[]) =>
   rankChoices(choices, wanted, foldChoiceText, { stem: true });
+const rankForms = (choices: readonly PickerChoice[], ...wanted: string[]) =>
+  rankChoices(choices, wanted, foldChoiceText, { spellings: spellingsOf });
 const rankLeading = (choices: readonly PickerChoice[], ...wanted: string[]) =>
   rankChoices(choices, wanted, foldChoiceText, { leading: true });
 
@@ -130,6 +132,98 @@ describe("rankChoices", () => {
   test("an empty or blank value matches nothing", () => {
     expect(rank([choice("Anything"), choice("")], "")).toEqual({ status: "missing" });
     expect(rank([choice("Anything")], "   ")).toEqual({ status: "missing" });
+  });
+});
+
+describe("rankChoices other written forms", () => {
+  test("an option naming an ordinal in words beats one merely holding every word as given", () => {
+    const stores = [choice("Example Fifth Avenue"), choice("Example Harbor 5th Avenue Mall")];
+    expect(rankForms(stores, "Example 5th Avenue")).toEqual({ status: "picked", index: 0, rank: "normalized" });
+    expect(rankForms([choice("Example 3rd Street"), choice("Example Third Street Annex")], "Example Third St")).toEqual({
+      status: "picked",
+      index: 0,
+      rank: "normalized",
+    });
+  });
+
+  test("a street, avenue or saint written short or in full matches the other", () => {
+    const stations = [choice("Seattle, WA - King Street Station (SEA)"), choice("Seattle, WA - Tukwila Station (TUK)")];
+    expect(rank(stations, "Seattle King St")).toEqual({ status: "missing" });
+    expect(rankForms(stations, "Seattle King St")).toEqual({ status: "picked", index: 0, rank: "allWords" });
+    expect(rankForms([choice("North Michigan Avenue"), choice("Lake Shore Drive")], "Michigan Ave")).toEqual({
+      status: "picked",
+      index: 0,
+      rank: "words",
+    });
+    expect(rankForms([choice("St. Johns"), choice("Johnstown")], "Saint Johns")).toEqual({ status: "picked", index: 0, rank: "folded" });
+  });
+
+  test("international, center, mount, fort and and written short or as a sign match", () => {
+    expect(rankForms([choice("Harbor City Intl (HCX)"), choice("Harbor City Regional (HCR)")], "HCX International")).toEqual({
+      status: "picked",
+      index: 0,
+      rank: "allWords",
+    });
+    expect(rankForms([choice("Example Ctr")], "Example Center")).toMatchObject({ status: "picked" });
+    expect(rankForms([choice("Mt Example")], "Mount Example")).toMatchObject({ status: "picked" });
+    expect(rankForms([choice("Fort Example")], "Ft Example")).toMatchObject({ status: "picked" });
+    expect(rankForms([choice("Pages & Prints"), choice("Pages Plus")], "Pages and Prints")).toEqual({
+      status: "picked",
+      index: 0,
+      rank: "normalized",
+    });
+  });
+
+  test("a state's or district's code and name match where a place ends the value", () => {
+    const cities = [choice("San Jose, California"), choice("San Jose, Costa Rica")];
+    expect(rank(cities, "San Jose CA")).toEqual({ status: "missing" });
+    expect(rankForms(cities, "San Jose CA")).toEqual({ status: "picked", index: 0, rank: "folded" });
+    const springfields = [choice("Springfield, Illinois, USA"), choice("Springfield, Missouri, USA")];
+    expect(rankForms(springfields, "Springfield IL")).toEqual({ status: "picked", index: 0, rank: "words" });
+    expect(rankForms([choice("Union Station, Washington, D.C."), choice("Union Station, Example City")], "Union Station DC")).toEqual({
+      status: "picked",
+      index: 0,
+      rank: "folded",
+    });
+    expect(rankForms([choice("Example Plaza, New York, NY")], "Example Plaza New York")).toMatchObject({ status: "picked" });
+  });
+
+  test("a spelling as given still decides at its rank, and an option's value never matches another form", () => {
+    // The value as given matches one option as whole words; the code's other forms never add a tie.
+    expect(rankForms([choice("Reagan National, Washington DC"), choice("Example DC Annex")], "Washington DC")).toEqual({
+      status: "picked",
+      index: 0,
+      rank: "words",
+    });
+    expect(rankForms([choice("Example", "illinois")], "IL")).toEqual({ status: "missing" });
+  });
+});
+
+describe("spellingsOf", () => {
+  test("lists the value first, then each other written form", () => {
+    expect(spellingsOf("Example 5th Ave")).toEqual(["Example 5th Ave", "example 5th avenue", "example fifth ave", "example fifth avenue"]);
+    expect(spellingsOf("Main St")).toEqual(["Main St", "main street", "main saint"]);
+    expect(spellingsOf("")).toEqual([]);
+  });
+
+  test("reads a state code only where a place ends the value, before a postal code or country at most", () => {
+    expect(spellingsOf("Springfield IL 62701")).toContain("springfield illinois 62701");
+    expect(spellingsOf("Example City ON M5V 2T6")).toContain("example city ontario m5v 2t6");
+    expect(spellingsOf("Pizza in Springfield")).toEqual(["Pizza in Springfield"]);
+    expect(spellingsOf("Washington DC")).toContain("washington d c");
+  });
+
+  test("lists at most 32 forms", () => {
+    expect(spellingsOf("1st 2nd 3rd 4th 5th 6th St").length).toBeLessThanOrEqual(32);
+  });
+});
+
+describe("closestFirst", () => {
+  test("puts the labels closest to the query first and keeps the given order among equals", () => {
+    const labels = ["Alpha Mall", "Beta Plaza", "Gamma Center", "Example Fifth Plaza", "Delta Park"];
+    expect(closestFirst(labels, "Example Fifth", rankByWords)[0]).toBe("Example Fifth Plaza");
+    expect(closestFirst(labels, "", rankByWords)).toEqual(labels);
+    expect(closestFirst(["B", "A"], "zzz", () => [0, 0])).toEqual(["B", "A"]);
   });
 });
 
