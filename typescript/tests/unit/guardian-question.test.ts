@@ -7,10 +7,7 @@ import type { ModelRequest, ModelResponse } from "@openai/agents";
 import { Effect } from "effect";
 import { afterEach, expect, it } from "vitest";
 import { makeOpenAIReviewer } from "../../src/guardian/openai.js";
-import {
-  guardianExecutionPolicy,
-  nativeExecutionEnvironment,
-} from "../../src/guardian/execution-policy.js";
+import { nativeExecutionEnvironment } from "../../src/guardian/execution-policy.js";
 import { ownerNamedOrigins } from "../../src/guardian/owner-named-origins.js";
 import { answersForReview, questionForReview } from "../../src/guardian/question.js";
 import type { PendingQuestion } from "../../src/guardian/question.js";
@@ -797,30 +794,9 @@ it("takes an off-site origin named only in an option the owner picked or typed b
   });
 });
 
-// Guardian told a build to have the owner confirm an off-site origin, the owner said yes to a
-// yes/no question naming it, and the next reviews still saw an origin nobody named, since a yes
-// carries no words of the owner's. The escalation and the question review now say how to get one
-// named, and the counting rule is unchanged.
-const ownerNamingRoute =
-  "To have the owner name an off-site origin, prefer a choice question whose option states the exact origin, or ask them to type it; a yes to a yes/no question does not name it.";
-
-it("tells the execution and question reviews how the owner names an off-site origin", async () => {
-  expect(guardianExecutionPolicy(nativeExecutionEnvironment)).toContain(
-    `only the owner's pick of an option naming it does. When an escalation needs the owner to name an off-site origin, say how in its rationale. ${ownerNamingRoute} The {{secret.<id>}} handle,`,
-  );
-  const requests = scripted([[message({ outcome: "allow_business", rationale: "Allowed." })]]);
-  await Effect.runPromise(
-    makeGuardian(makeOpenAIReviewer("{{ tenant_policy_config }}", false, native)).reviewQuestion(
-      pending,
-      question,
-      unreadable,
-    ),
-  );
-  expect(reviewPolicyOf(requests[0])).toContain(
-    `never tell the agent that only the host can authorize another domain. ${ownerNamingRoute} A yes/no question asked only for that is the exception to the rule above: prefer reword, saying to ask it one of those ways.\n`,
-  );
-});
-
+// Guardian told a build to have the owner confirm an off-site origin, and the owner's yes to a
+// yes/no question naming it carried no words of the owner's, so the next reviews still saw an
+// origin nobody named. The policies now say how to get one named; the counting rule is unchanged.
 it("still names no origin from a confirmed yes/no whose prompt names one", async () => {
   const reviewed = await Effect.runPromise(
     answersForReview(

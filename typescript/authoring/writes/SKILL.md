@@ -342,11 +342,14 @@ too. Run each step with `execute` purpose `act`, target `liveBrowser`.
   last item, over reloading the page after every item. When a commit answers 429 or a bot
   challenge, prefer stopping before the next commit and returning each item's outcome: added,
   refused by the site, or not tried. An item is refused only when the site answered its own
-  commit request with 429 or a challenge, and not tried only when its commit step never entered;
-  a timeout or a missing answer is neither, so read that item back as above. An item its own
-  commit response confirmed stays added even when the block stops the last read. Never return a
-  refused or not-tried item as added, and call `verified()` only when at least one item was
-  added; when none was, throw `OperationFailure`, as for any block.
+  commit request with 429 or a challenge and nothing got past it, and not tried only when its
+  commit step never entered; a challenge cleared afterwards, a timeout or a missing answer is
+  neither, so read that item back as above. An item its own commit response confirmed stays
+  added even when the block stops the last read. Never guess an item's outcome or return a
+  refused or not-tried item as added. Call `verified()` only when every item is settled as
+  added, refused or not tried and at least one was added. Otherwise, such as when the block also
+  stops an item's read-back, throw `OperationFailure` listing each item's outcome, an unsettled
+  one as unknown, so the run reports a possible change ("What runs do with it").
 - When a read-back is needed, the first one that matches confirms the write; stop there. It
   matches when it shows
   the written record after the write, found by something the write produced or entered (its

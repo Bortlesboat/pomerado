@@ -115,10 +115,10 @@ pomerado:section core.execute-calls:end -->
   expected content, as `references/navigation.ts` does, is right and costs nothing extra. Avoid a
   separate challenge probe or call on every pass of a polling loop of your own, and never wait out
   a timeout and swallow it to probe for a challenge.
-- When the site answers 429 partway through a read, or `waitPastChallenge` throws there, prefer
-  letting the call fail over retrying or looping inside the tool, or over returning the rows read
-  so far: a host may give a blocked read another browser or one rerun, and only a failed call
-  reaches it.
+- When the site answers 429 partway through a read-only tool's read, or `waitPastChallenge`
+  throws there, prefer letting the call fail over retrying or looping inside the tool, or over
+  returning the rows read so far: a host may give a blocked read another browser or one rerun,
+  and only a failed call reaches it.
 - Never repeat a call that may have run.
 - When the site itself refuses a caller's value, such as a past date, an unknown airport code
   or a party size over its limit, throw `new errors.InvalidInput(message, { field })` saying why,
