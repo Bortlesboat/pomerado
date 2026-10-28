@@ -1,13 +1,20 @@
 import { test, expect } from "@playwright/test";
+import type { ModelProvider } from "@openai/agents";
+import { Effect } from "effect";
+import { createPomerado } from "../../src/standalone/pomerado.js";
+import { makeInputAsker } from "../../src/inputs/callback.js";
+import type { InputRequest } from "../../src/runtime/input-request.js";
 import {
   call,
   contextOf,
   currentOf,
   execution,
   executionIdOf,
+  html,
   patch,
   probe,
   recordingGuardian,
+  startSite,
   toolResult,
   writePath,
   type RecordedReview,
@@ -535,6 +542,187 @@ test("publication refuses a composed script that leaves a mark of the recorded p
     expect(built.build, JSON.stringify(built)).toBe("published");
     expect(fixture.drafts).toEqual(["Avery"]);
     expect(fixture.quotes).toEqual(["Avery"]);
+  } finally {
+    await site.close();
+  }
+});
+
+/**
+ * A form that saves the applicant's email, then emails a code that confirms it before the
+ * application goes through. The code screen is part of the form, never a sign-in, and each save
+ * sends the next code.
+ */
+const codeFormSite = () => {
+  const codes = ["481516", "620734"];
+  const saves: string[] = [];
+  const verified: string[] = [];
+  return {
+    saves,
+    verified,
+    /** The code the latest save sent, as the person reads it in their email. */
+    sent: () => codes[saves.length - 1] ?? "",
+    codes,
+    start: () =>
+      startSite((request, response, body) => {
+        if (request.method === "POST" && request.url === "/save") {
+          saves.push(body);
+          response.end("sent");
+          return;
+        }
+        if (request.method === "POST" && request.url === "/verify") {
+          verified.push(body);
+          response.end(body === codes[saves.length - 1] ? "Application submitted" : "Wrong code");
+          return;
+        }
+        html(
+          response,
+          `<title>Apply</title><label>Email<input id="email"></label><button id="save" onclick="fetch('/save',{method:'POST',body:document.querySelector('#email').value}).then(()=>{document.querySelector('#verify').hidden=false;document.querySelector('#status').textContent='We emailed you a 6-digit code';})">Save and continue</button><div id="verify" hidden><label>Verification code<input id="code" autocomplete="one-time-code" inputmode="numeric"></label><button id="confirm" onclick="fetch('/verify',{method:'POST',body:document.querySelector('#code').value}).then((r)=>r.text()).then((t)=>{document.querySelector('#status').textContent=t;})">Verify</button></div><div id="status"></div>`,
+        );
+      }),
+  };
+};
+/** The form's whole write path: the saved email, then the confirmed code. */
+const codePath = {
+  steps: [
+    { commit: "save", does: "Saves the applicant's email, which sends a code" },
+    { commit: "verify", does: "Confirms the emailed code, which submits the application" },
+  ],
+  ends: "The site's notice that the application was submitted",
+};
+/** Saves the email and waits for the code screen the save opens. */
+const saveEmailCall =
+  'enteringCommit("save"); const saved = await kernel.browsers.playwright.execute(sessionId,{code:"await page.locator(\'#email\').fill(" + JSON.stringify(input.email) + "); await page.locator(\'#save\').click(); await page.locator(\'#code\').waitFor(); return true;",timeout_sec:10}); if(!saved.success || saved.result !== true) throw new Error("No code screen");';
+/** Asks for the emailed code through the declared secret question, then enters and confirms it. */
+const confirmCodeCall =
+  'const code = await ask("code"); enteringCommit("verify"); const done = await kernel.browsers.playwright.execute(sessionId,{code:"await page.locator(\'#code\').fill(" + JSON.stringify(code) + "); await page.locator(\'#confirm\').click(); await page.waitForFunction(() => document.querySelector(\'#status\').textContent === \'Application submitted\'); return true;",timeout_sec:10}); if(!done.success || done.result !== true) throw new Error("Not submitted");';
+const codeQuestion =
+  '{code:{type:"secret",secretKind:"one_time_code",prompt:"Enter the verification code the website just emailed you."}}';
+/** An application script declaring the code question, whose body runs `body`. */
+const codeScript = (name: string, body: string) => `import { Schema } from "effect";
+import { defineOperation } from "../runtime/index.js";
+export default defineOperation({name:"${name}",input:Schema.Struct({email:Schema.String}),output:Schema.Unknown,questions:${codeQuestion},write:{confirmation:"message",commits:["save","verify"]}},
+async ({kernel,sessionId,input,ask,enteringCommit,verified}) => { ${body} });`;
+
+// A site that sends a verification code partway through a signed-out write has no sign-in for
+// the code to belong to. The session's next act step asks for it through a secret question: the
+// owner's answer reaches the step's script alone, the same session finishes, and the composed
+// tool's run asks its caller for the next code the same way. Nothing is sent twice.
+test("a code a signed-out write's form sends goes through the act step's secret question, and the tool's run asks its caller the same way", async () => {
+  test.setTimeout(120_000);
+  const fixture = codeFormSite();
+  const site = await fixture.start();
+  const guardian = recordingGuardian();
+  const intent =
+    "Submit my application with my email, confirming it with the code the site emails me";
+  try {
+    const { built, last, requests, asked } = await mint({
+      effect: "write",
+      url: site.url,
+      intent,
+      input: { email: "avery@example.test" },
+      guardian,
+      answer: (request) =>
+        Object.fromEntries(request.questions.map((question) => [question.id, fixture.sent()])),
+      turns: [
+        () =>
+          patch({
+            "src/save.mjs": codeScript(
+              "save_email",
+              `${saveEmailCall} verified({confirmation:"message"}); return {code_sent:true};`,
+            ),
+            "src/confirm.mjs": codeScript(
+              "confirm_code",
+              `${confirmCodeCall} verified({confirmation:"message"}); return {submitted:true};`,
+            ),
+            "src/tool.mjs": codeScript(
+              "submit_application",
+              `${saveEmailCall} ${confirmCodeCall} verified({confirmation:"message"}); return {submitted:true};`,
+            ),
+          }),
+        () => [call("execute", act("src/save.mjs", undefined, codePath), "save")],
+        () => [call("execute", act("src/confirm.mjs"), "confirm")],
+        (request) => [
+          call(
+            "finish_build",
+            {
+              intent: "Return the composed application without running it",
+              entrypoint: "src/tool.mjs",
+              executionId: executionIdOf(request, "confirm"),
+              metadata: {
+                name: "submit_application",
+                description: "Submit an application, confirming the code the site emails",
+              },
+              coverage: "One signed-out act session through the emailed code to the submission",
+            },
+            "publish",
+          ),
+        ],
+      ],
+    });
+    const [minted] = fixture.codes;
+    expect(toolResult(last, "save")).toMatchObject({
+      status: "completed",
+      writePath: { remaining: ["verify"] },
+    });
+    expect(toolResult(last, "confirm")).toMatchObject({ status: "completed" });
+    expect(built.build, JSON.stringify(built)).toBe("published");
+    // The owner was asked once, for the code, as a protected one-time code question.
+    expect(asked.map((request) => request.questions)).toEqual([
+      [expect.objectContaining({ id: "code", type: "secret", secretKind: "one_time_code" })],
+    ]);
+    // One session: one save, one confirmation, with the owner's code.
+    expect(fixture.saves).toEqual(["avery@example.test"]);
+    expect(fixture.verified).toEqual([minted]);
+    // The code reached the step's script alone: not the minter, Guardian or the published tool.
+    expect(JSON.stringify(requests)).not.toContain(minted);
+    expect(JSON.stringify(guardian.reviews)).not.toContain(minted);
+    expect(JSON.stringify(built)).not.toContain(minted);
+    expect(built.artifact?.questions?.["code"]).toMatchObject({
+      type: "secret",
+      secretKind: "one_time_code",
+    });
+    if (built.artifact === undefined) throw new Error(JSON.stringify(built));
+    const artifact = built.artifact;
+    // The published tool's run asks its own caller for the code the site sends it.
+    const runAsked: InputRequest[] = [];
+    const modelCalls: string[] = [];
+    const noModel = (role: string): ModelProvider => ({
+      getModel: () => {
+        modelCalls.push(role);
+        throw new Error(`Unexpected ${role} model request during a run`);
+      },
+    });
+    const output = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const service = yield* createPomerado({
+            ask: makeInputAsker((request) =>
+              Effect.sync(() => {
+                runAsked.push(request);
+                return Object.fromEntries(
+                  request.questions.map((question) => [question.id, fixture.sent()]),
+                );
+              }),
+            ),
+            minterProvider: noModel("minter"),
+            guardianProvider: noModel("guardian"),
+            timeoutMs: 30_000,
+          });
+          return yield* service.run(artifact, {
+            url: site.url,
+            intent,
+            input: { email: "blake@example.test" },
+          });
+        }),
+      ),
+    );
+    expect(output).toEqual({ submitted: true });
+    expect(runAsked.map((request) => request.questions)).toEqual([
+      [expect.objectContaining({ id: "code", type: "secret", secretKind: "one_time_code" })],
+    ]);
+    expect(fixture.saves).toEqual(["avery@example.test", "blake@example.test"]);
+    expect(fixture.verified).toEqual(fixture.codes);
+    expect(modelCalls).toEqual([]);
   } finally {
     await site.close();
   }

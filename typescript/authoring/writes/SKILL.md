@@ -205,6 +205,10 @@ During the session:
   that exists only on the page mid-flow, such as a seat on the flight just chosen, is
   a declared `ask` in the next `act` step's script (the caller-input skill). An
   answered question settles the option. Check the page again before continuing.
+- A code the site sends during the write, signed out too, such as one confirming an email or
+  phone the form took, belongs to the write, not a sign-in: prefer a `secret` question of kind
+  `one_time_code` that the next `act` step's script asks, as the caller-input skill's code
+  example does, over `authenticate`.
 
 ## The session
 

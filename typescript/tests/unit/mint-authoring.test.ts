@@ -1231,6 +1231,30 @@ it("asks for an access code with a private secret question", async () => {
   );
 });
 
+// A code the site sends partway through a write, such as one confirming an email or phone the
+// form took, has no sign-in to belong to, signed out above all. The writes skill sends it through
+// a secret question the session's act step asks, and the auth skill no longer limits a code
+// question to protected actions after sign-in. A code that is part of signing in still goes
+// through authenticate, and a host sign-in step still refuses a registration screen.
+it("has a write ask for a code the site sends during it from its act step, not through authenticate", async () => {
+  const texts = await renderedTexts("typescript/authoring");
+  const text = (name: string) => (texts.get(name) ?? "").replace(/\s+/g, " ");
+  expect(text("writes")).toContain(
+    "A code the site sends during the write, signed out too, such as one confirming an email or phone the form took, belongs to the write, not a sign-in: prefer a `secret` question of kind `one_time_code` that the next `act` step's script asks, as the caller-input skill's code example does, over `authenticate`.",
+  );
+  expect(text("auth")).toContain(
+    "A `request_input` or script secret question for a code is only for a code that is not part of signing in: another code a later protected action after sign-in asks for, or a code the site sends during a write, signed out too (writes skill); `authenticate` is never started just for such a code.",
+  );
+  expect(text("auth")).not.toContain("is only for a later protected action after sign-in");
+  // Unchanged: a code that is part of signing in is the sign-in's own code field.
+  expect(text("auth")).toContain(
+    "A code the site sends as part of signing in, by text message, email or an authenticator app, is part of the sign-in: map its screen as a `signInStep` with a `code` field and let `authenticate` get the code, which the host fills or asks the caller for. Never ask for it separately with `request_input`.",
+  );
+  expect(guardianExecutionPolicy(nativeExecutionEnvironment)).toContain(
+    "Deny a registration, password-reset or unrelated action, and any passkey or security-key step even when trusted intent asks for one.",
+  );
+});
+
 // A file collected during a build has no download link, which only a published tool's runs add.
 it("tells the minter a collected file's download link appears only when the published tool runs", async () => {
   const texts = await renderedTexts("typescript/authoring");
@@ -1265,11 +1289,11 @@ it("renders the pinned standalone authoring", async () => {
   ]).toStrictEqual([
     ["5f3af5401fa484e56cd4eaeca41da8ba04cb9ded455ffc46263e659a05e2d54e", "core"],
     ["933e2daac360d31beeeb2a8aeabcf22ca8512cc0272f321b047106f4a2055ab3", "search"],
-    ["cec5bca01bf057a95faaab07e25c02e3d0b9329e66d6df97b6744f81ab421bf7", "auth"],
+    ["930550863b9f83e98719b77bc149b20e70b526a88a16dd758d44ab20d048d8cb", "auth"],
     ["ad5b4f8391094f6d7c8ff4a480b071bb298807da9523971e0aaf7d719f152664", "testing"],
     ["2b559ad88157f28be2a054787f4c736cf192bb825760bdf3050c01a59d060ba8", "pagination"],
     ["4d05ffc26a395fafb591bb8ac593b79ae7450f21f26ac8709cbbe543fc2453df", "forms"],
-    ["ae84ba5cd3c71b639c886e82930f9c7f022b88583380ca208e13dd7788eb2170", "writes"],
+    ["84e148c4a1303c3f955742e50bc046a3ade624def1a91f5ed3fb70de3d0b3c8e", "writes"],
     ["d06f650fc09f74d3711e043da2303de97ced42c9ff2541d48ec28cd7e686519d", "cart"],
     ["14ec800f1f19a16e1a94c11e8a4e869e798bf597d86cd2369a51d32d66c9bc94", "caller-input"],
     ["fb7cd6b0929612a94dd6e0a3c54fa42e102ada77ccd83059fe818a01d8307cf0", "publication"],
