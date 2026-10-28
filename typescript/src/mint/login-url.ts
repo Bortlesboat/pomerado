@@ -4,7 +4,8 @@ import { MintFailure } from "./contracts.js";
 
 // The login URL a signed-in tool publishes, and the other published parts, checked at publication:
 // a registered credential in any of them is refused every time, and a login URL that is one
-// authorization request is asked about once.
+// authorization request, or carries one browser's device or session identifier, is asked about
+// once.
 
 /** Parameters that belong to one authorization request: their values are spent when it ends. */
 const oneTimeParameters = new Set(
@@ -26,6 +27,26 @@ const opaqueWhenRandom = new Set(["state", "nonce", "relaystate"]);
 /** A random token mixes letters and digits at length; `state=CA` or `state=signed-in` does not. */
 const looksOpaque = (value: string) =>
   value.length >= 16 && /^[\w.~+/=-]+$/u.test(value) && /\d/u.test(value) && /[a-z]/iu.test(value);
+const looksLikeUuid = (value: string) =>
+  /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/iu.test(value);
+
+/**
+ * A device or session identifier's name, case-insensitive: its last word, split on `-`, `_` or
+ * `.`, is `did`, `sid` or `deviceid`, or ends in `sessionid` or `sessid` (`SessionId`,
+ * `JSESSIONID`, `PHPSESSID`), or its last two words are `device` and `id` or `session` and `id`
+ * (`device_id`, `x-session-id`). So `x-shop-did`, `deviceId` and `sid` match, and `client_id`,
+ * `paid` and `lang` do not. Such a parameter is one browser's only when its value is opaque.
+ */
+const namesBrowserIdentifier = (key: string) => {
+  const words = key.split(/[-_.]/u);
+  const last = words.at(-1) ?? "";
+  const lastTwo = words.slice(-2).join("");
+  return (
+    ["did", "sid", "deviceid"].includes(last) ||
+    /(?:sessionid|sessid)$/u.test(last) ||
+    (words.length >= 2 && ["deviceid", "sessionid"].includes(lastTwo))
+  );
+};
 
 /**
  * A query or fragment's parameters with percent escapes decoded and `+` left as written: an
@@ -44,13 +65,17 @@ const authorizePath =
   /\/(?:authorize|as\/authorization\.oauth2|protocol\/openid-connect\/auth)\/?$/iu;
 
 /**
- * What marks a login URL as one authorization request: its one-time parameters' names (never
- * their values), such as an OAuth `code_challenge`, an opaque `state` or `nonce`, or a
- * `SAMLRequest`, and its path when that is an identity provider's authorize endpoint. During a
- * build it only tells the minting agent once that the URL is unlikely to work again, whether it
- * read the URL from the page or passed it itself, and never changes or refuses the URL. The
- * sign-in version check refuses a version whose entry URL it marks (`one_time_url`), since no
- * later run could open that URL again, unless the host already asked about it.
+ * What marks a login URL as one authorization request or one browser's session: its one-time
+ * parameters' names (never their values), such as an OAuth `code_challenge`, an opaque `state` or
+ * `nonce`, or a `SAMLRequest`; a device or session identifier with an opaque or UUID value, such
+ * as `x-shop-did`, `device_id` or `sid`, which the site put in the link for the browser that read
+ * it (`sid=en` stays unmarked); and its path when that is an identity provider's authorize
+ * endpoint. A new browser that opens such a link presents another browser's values, which a site
+ * can answer with a bot challenge or an error. During a build it only tells the minting agent once
+ * that the URL is unlikely to work again, whether it read the URL from the page or passed it
+ * itself, and never changes or refuses the URL. The sign-in version check refuses a version whose
+ * entry URL it marks (`one_time_url`), since no later run could open that URL again, unless the
+ * host already asked about it.
  */
 export const oneTimeLoginUrlParameters = (loginUrl: string): readonly string[] => {
   const url = URL.parse(loginUrl);
@@ -63,6 +88,7 @@ export const oneTimeLoginUrlParameters = (loginUrl: string): readonly string[] =
       if (
         oneTimeParameters.has(key) ||
         (opaqueWhenRandom.has(key) && looksOpaque(value)) ||
+        (namesBrowserIdentifier(key) && (looksOpaque(value) || looksLikeUuid(value))) ||
         (key === "request_uri" && value.startsWith("urn:ietf:params:oauth:request_uri:"))
       )
         names.add(name);

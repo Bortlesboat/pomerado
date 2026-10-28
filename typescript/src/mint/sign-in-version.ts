@@ -68,8 +68,9 @@ export type SignInVersionRule =
   | "marker_matches_signed_out_page"
   // A step's submit, method or page, or the account page the marker opens, signs out.
   | "sign_out"
-  // The entry URL is one authorization request, which no later run can open again, and the host
-  // did not already ask about it (`entryUrlAsked`).
+  // The entry URL is one authorization request, or carries one browser's device or session
+  // identifier, which no later run can open again, and the host did not already ask about it
+  // (`entryUrlAsked`).
   | "one_time_url"
   // The entry URL carries a user name or password.
   | "url_credentials"
