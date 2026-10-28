@@ -61,13 +61,21 @@ import {
   TaskUpdateRequest,
   withOwnWords,
 } from "./contracts.js";
-import { answersForReview, type AnsweredQuestion } from "../guardian/question.js";
+import {
+  answersForReview,
+  type AnsweredQuestion,
+  questionNotNeededLabels,
+  type QuestionFinding,
+} from "../guardian/question.js";
 import type { ReviewedLiveTestBatch } from "../guardian/review.js";
 import {
   cutToLimit,
   publicationRefusalUnfixable,
   type PublicationFinding,
+  type ResponseRuling,
+  hostRecordedEvidencePath,
 } from "../guardian/review-contracts.js";
+import { publicationFindingId } from "../guardian/publication.js";
 import {
   taskUpdateForReview,
   type PendingTaskUpdate,
@@ -547,6 +555,12 @@ const refusalRecovery = (reason: string | undefined, write: boolean): Publicatio
         !(write && reason === "input_contract_changed")
       ? "new_observation"
       : "correct_source";
+/**
+ * How the minter answers a finding it holds wrong instead of resubmitting unchanged, added to a
+ * Guardian denial's instruction.
+ */
+const findingAnswerInstruction =
+  " When you hold a finding wrong, or no longer applying, under the review's rules, answer it instead of resubmitting unchanged: call finish_build again with findingResponses naming its id, a short response and the evidence that shows it, a live test caseId or a capture the host recorded, never a file you wrote. Guardian rules on each answer in the next review. An answer never stands in for a live run or capture a finding asks for.";
 /** A refusal the harness makes before publication runs, as its decision. */
 const hostRefusalDecision = (
   reason: string,
@@ -1126,6 +1140,11 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
        * question's id, once asked: an id names one review, so an answer under it binds to that one.
        */
       const confirmAsks = new Map<string, string>();
+      /**
+       * The ids of questions Guardian already sent back once for other words. Each is asked again
+       * at most once: after a second rewording, the minter goes on without it.
+       */
+      const rewordedQuestions = new Set<string>();
       /**
        * Whether the owner's latest request_input kept an answer Guardian reads, with no other call
        * through the turn's actions since: what `owner_ended` stands on. A secret or sign-in answer
@@ -1724,25 +1743,40 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
         Effect.forEach(findings, (finding) =>
           screenRationale(finding.explanation).pipe(
             Effect.map((explanation) => ({
+              // Taken from the finding as Guardian returned it, so the next review knows it.
+              id: publicationFindingId(finding),
               ...finding,
               file: workspacePath(finding.path),
               explanation,
             })),
           ),
         );
+      /** Guardian's rulings on the minter's answers, each reason screened like its rationale. */
+      const minterRulings = (rulings: readonly ResponseRuling[]) =>
+        Effect.forEach(rulings, (ruling) =>
+          screenRationale(ruling.reason).pipe(Effect.map((reason) => ({ ...ruling, reason }))),
+        );
       const minterReview = <
         Review extends {
           readonly rationale: string;
           readonly findings?: readonly PublicationFinding[] | undefined;
+          readonly responseRulings?: readonly ResponseRuling[] | undefined;
         },
       >(
         review: Review,
       ) =>
         Effect.gen(function* () {
           const rationale = yield* screenRationale(review.rationale);
-          return review.findings === undefined
-            ? { ...review, rationale }
-            : { ...review, rationale, findings: yield* minterFindings(review.findings) };
+          return {
+            ...review,
+            rationale,
+            ...(review.findings === undefined
+              ? {}
+              : { findings: yield* minterFindings(review.findings) }),
+            ...(review.responseRulings === undefined
+              ? {}
+              : { responseRulings: yield* minterRulings(review.responseRulings) }),
+          };
         });
       const screenAssumptions = (proposedAssumptions: PublicationRequest["assumptions"] = []) =>
         Effect.gen(function* () {
@@ -5076,11 +5110,20 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                 ...(yield* inputSchemaOf(httpEntrypoint)),
               });
           }
+          // Whether the host's batch cap, not time, leaves no batch to run: once time ran out, the
+          // review keeps each gap a note instead.
+          const runsLeft =
+            liveTestsOutOfTime ||
+            (yield* liveTestBatchFits(
+              dependencies.liveTests,
+              (yield* liveTestDeadline).deadlineAt,
+            ));
           return liveTestsEvidence({
             file: Either.isRight(read) ? read.right : emptyCases,
             ...(Either.isLeft(read) ? { fileProblem: read.left } : {}),
             versions,
             outOfTime: liveTestsOutOfTime,
+            ...(runsLeft ? {} : { noRunsLeft: true }),
             ...(signedInRead ? { signedIn: true } : {}),
           });
         }).pipe(
@@ -5103,6 +5146,12 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
        * evidence the host holds. The same again is refused before a second review. Kept in memory
        * only, so a takeover drops it.
        */
+      /**
+       * The findings of Guardian's latest publication denial by id, the ones the minter may answer
+       * in its next finish_build (`PublicationRequest.findingResponses`) or name in a question
+       * (`AgentRequest.finding`), each as the minter read it.
+       */
+      let answerableFindings: ReadonlyMap<string, QuestionFinding> = new Map();
       let deniedSubmission:
         | {
             readonly paths: readonly string[];
@@ -5765,6 +5814,50 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                   executionContext: yield* executionContext(),
                 });
               }
+              // An answer names a finding of the latest denial, once: anything else has nothing
+              // for the next review to rule on, so it is refused before that review.
+              const answeredIds = (proposed.findingResponses ?? []).map(({ finding }) => finding);
+              const unanswerable = answeredIds.filter(
+                (id, index) => !answerableFindings.has(id) || answeredIds.indexOf(id) !== index,
+              );
+              if (unanswerable.length > 0) {
+                const reason = "finding_responses_unknown";
+                pendingDecision = hostRefusalDecision(reason, evidence.executionId, write);
+                yield* diagnose({ phase: "publication", code: "PublicationUnavailable", reason });
+                return JSON.stringify({
+                  status: "not_published",
+                  code: "PublicationUnavailable",
+                  reason,
+                  unanswerable: [...new Set(unanswerable)],
+                  answerable: [...answerableFindings.keys()],
+                  userInputRequired: false,
+                  instruction:
+                    "Not published and not reviewed: each findingResponses entry must name, once, the id of a finding in Guardian's latest publication denial; answerable lists them. Remove or correct the others and call finish_build again.",
+                  executionContext: yield* executionContext(),
+                });
+              }
+              // Only the host's own record shows a finding wrong: a file the minter wrote is no
+              // evidence, so an answer citing one is refused before review.
+              const unrecorded = (proposed.findingResponses ?? []).flatMap(({ evidence }) =>
+                evidence?.path === undefined || hostRecordedEvidencePath(evidence.path)
+                  ? []
+                  : [evidence.path],
+              );
+              if (unrecorded.length > 0) {
+                const reason = "finding_evidence_unrecorded";
+                pendingDecision = hostRefusalDecision(reason, evidence.executionId, write);
+                yield* diagnose({ phase: "publication", code: "PublicationUnavailable", reason });
+                return JSON.stringify({
+                  status: "not_published",
+                  code: "PublicationUnavailable",
+                  reason,
+                  unrecorded: [...new Set(unrecorded)],
+                  userInputRequired: false,
+                  instruction:
+                    "Not published and not reviewed: a findingResponses evidence path must name a capture the host recorded, under captures/, or publication/tests.json, never a file you wrote. Cite a live test caseId or such a capture, or leave the evidence out, and call finish_build again.",
+                  executionContext: yield* executionContext(),
+                });
+              }
               // Guardian denied this same submission, and a second review would deny it again.
               if (yield* unchangedSinceDenial(proposed)) {
                 const reason = "unchanged_since_denial";
@@ -5792,6 +5885,30 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                       ...proposed.httpVersion,
                       note: yield* screenMintText(dependencies, proposed.httpVersion.note),
                     };
+              const findingResponses =
+                proposed.findingResponses === undefined
+                  ? undefined
+                  : yield* Effect.forEach(proposed.findingResponses, (answer) =>
+                      Effect.gen(function* () {
+                        const response = yield* screenMintText(dependencies, answer.response);
+                        const path =
+                          answer.evidence?.path === undefined
+                            ? undefined
+                            : yield* screenMintText(dependencies, answer.evidence.path);
+                        return {
+                          ...answer,
+                          response,
+                          ...(answer.evidence === undefined
+                            ? {}
+                            : {
+                                evidence: {
+                                  ...answer.evidence,
+                                  ...(path === undefined ? {} : { path }),
+                                },
+                              }),
+                        };
+                      }),
+                    );
               const outputOverrides =
                 proposed.outputOverrides === undefined
                   ? undefined
@@ -5876,6 +5993,7 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                     ...(readBackUnavailable === undefined ? {} : { readBackUnavailable }),
                     ...(httpVersion === undefined ? {} : { httpVersion }),
                     ...(outputOverrides === undefined ? {} : { outputOverrides }),
+                    ...(findingResponses === undefined ? {} : { findingResponses }),
                   },
                   evidence,
                   ...(liveTests === undefined
@@ -5986,6 +6104,14 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                   ]),
                 ];
                 deniedSubmission = yield* submissionSnapshot(proposed, paths);
+                answerableFindings = new Map(
+                  (yield* minterFindings(denial?.findings ?? [])).map(
+                    ({ id, category, file, explanation }) => [
+                      id,
+                      { id, category, file, explanation },
+                    ],
+                  ),
+                );
               }
               // Guardian's public reason reaches the caller screened like the caller's other
               // text: credentials and host-private values out, cut to its bound. A screen that
@@ -6511,9 +6637,11 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                     repeatableRead,
                   },
                   (error.code === "ReviewDenied" && error.review?.reason === "evidence"
-                    ? "Not published yet: Guardian needs more evidence to judge this publication, and the rationale names each missing item. Gather each one within your authority, such as running the live tests or cases it names so their results reach the test record, or exploring the site's own controls for a capture it names, and fix every finding, then call finish_build again. A retired failure in publication/tests.json clears only by a way its clearedBy lists: running the same cases again on the same source clears none. Missing evidence is not a refusal and never a reason for a policy block. The existing example and result remain recorded."
+                    ? "Not published yet: Guardian needs more evidence to judge this publication, and the rationale names each missing item. Gather each one within your authority, such as running the live tests or cases it names so their results reach the test record, or exploring the site's own controls for a capture it names, and fix every finding, then call finish_build again. A retired failure in publication/tests.json clears only by a way its clearedBy lists: running the same cases again on the same source clears none. Missing evidence is not a refusal and never a reason for a policy block. The existing example and result remain recorded." +
+                      findingAnswerInstruction
                     : error.code === "ReviewDenied" && error.review !== undefined
-                      ? "Not published: Guardian blocked this publication. Each finding's explanation says what is wrong, the evidence and the fix, at its file and byte range. Fix every finding and each missing item the rationale names, then call finish_build again with the same executionId. The existing example and result remain recorded."
+                      ? "Not published: Guardian blocked this publication. Each finding's explanation says what is wrong, the evidence and the fix, at its file and byte range. Fix every finding and each missing item the rationale names, then call finish_build again with the same executionId. The existing example and result remain recorded." +
+                        findingAnswerInstruction
                       : "Not published. The existing example and result remain recorded. Source edits and another finish_build publication review may continue; this does not guarantee the failure is repairable.") +
                     " A fresh reviewed example read requires an available live host and host repeatableRead:true within the same input/account after confirmed executor cleanup. Otherwise never repeat the example or a write step that may have committed.",
                 );
@@ -6568,9 +6696,23 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                   userInputRequired: false,
                   instruction: `A confirm question with confirmsReview needs an id of its own: ${reused.map(({ questionId }) => questionId).join(", ")} already holds an answer or asked about another refusal. Give it a new id and ask again.`,
                 });
+              // A question about a publication finding names one the latest denial holds: the review
+              // judges it against that finding, which the minter cannot write itself.
+              const finding =
+                decoded.finding === undefined ? undefined : answerableFindings.get(decoded.finding);
+              if (decoded.finding !== undefined && finding === undefined)
+                return JSON.stringify({
+                  status: "question_refused",
+                  reason: "finding_unknown",
+                  answerable: [...answerableFindings.keys()],
+                  userInputRequired: false,
+                  instruction:
+                    "finding names the id of a finding in Guardian's latest publication denial, and answerable lists them. Set it to one of those, or leave it out, and ask again.",
+                });
+              const { finding: _finding, ...unmarked } = decoded;
               const proposed = callerVisibleRequest(
                 {
-                  ...decoded,
+                  ...unmarked,
                   questions: decoded.questions.map((question) => {
                     if (question.type !== "confirm") return question;
                     const { endsBuild: _mark, confirmsReview: _confirms, ...asked } = question;
@@ -6616,6 +6758,7 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                   ...(yield* publicationRefusals),
                   ...decidedBuildEffect(),
                   ...(confirms.length === 0 ? {} : { confirms }),
+                  ...(finding === undefined ? {} : { finding }),
                 });
                 yield* reviewCompleted;
                 reviewId = review.reviewId;
@@ -6628,6 +6771,8 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                     ...(reviewId === undefined ? {} : { reviewId }),
                     questionCount: submitted.questions.length,
                     reviewOutcome: review.outcome,
+                    ...(review.label === undefined ? {} : { reviewLabel: review.label }),
+                    ...(finding === undefined ? {} : { aboutFinding: true }),
                     priorExecutions: priorPurposes.length,
                     priorLiveExecutions: executions.filter((entry) => entry.effect !== "not_sent")
                       .length,
@@ -6700,15 +6845,35 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                   });
                 }
                 // The read-or-write question is the turn's only move, so it is never withdrawn.
-                if (review.outcome !== "allow_business")
+                // Any other is asked again in other words unless Guardian found none needed.
+                if (review.outcome !== "allow_business") {
+                  // A question already reworded once is not asked again in other words.
+                  const ids = submitted.questions.map((question) => question.id);
+                  const rewordedBefore = ids.some((id) => rewordedQuestions.has(id));
+                  if (!effectQuestion) for (const id of ids) rewordedQuestions.add(id);
+                  const questionNeeded = effectQuestion
+                    ? undefined
+                    : rewordedBefore
+                      ? false
+                      : review.label === undefined || review.label === "other"
+                        ? undefined
+                        : !questionNotNeededLabels.includes(review.label);
                   return JSON.stringify({
                     status: "question_rejected",
                     rationale,
+                    ...(questionNeeded === undefined ? {} : { questionNeeded }),
                     userInputRequired: false,
                     instruction: effectQuestion
                       ? "Reword the question using the rationale and call request_input again. This read-or-write question is required, and no other tool opens until the person answers it. The host sets its two answer labels, so change only the prompt."
-                      : "Reword the question using the rationale, or withdraw it and continue. Do not ask again for a value you were already given or that the site shows. A reworded question is reviewed again.",
+                      : questionNeeded === true
+                        ? "Guardian wants this question in other words: the owner still needs to answer it. Call request_input again, once, with the question reworded as the rationale says and the same question ids; do not drop it. The reworded question is reviewed again."
+                        : rewordedBefore
+                          ? "Guardian sent this question back again after it was reworded once, so it is not asked again. Go on without asking it, using what the rationale says, and do not ask it again in other words."
+                          : questionNeeded === false
+                            ? "Guardian found no question needed: the rationale says why, such as an answer you already have or the default the step keeps. Continue without asking it, and do not ask it again in other words."
+                            : "Call request_input again, once, with the question reworded as the rationale says and the same question ids; the reworded question is reviewed again. Continue without it only when the rationale says plainly that no question is needed, such as for a value you were already given or that the site shows.",
                   });
+                }
               }
               for (const { questionId, reviewId } of confirms) confirmAsks.set(questionId, reviewId);
               askingId = requestId;
@@ -7015,13 +7180,19 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                             "A change to the published tool's contract needs its owner's confirmation, and nothing changed. Ask with request_input, naming the change and what the site no longer shows, then call mint_update again naming the questions answered in confirmedBy.",
                         });
                     }
+                    // Running signed out narrows what the build may do, on a host that keeps
+                    // the sign-ins that must stay (`signedOutNarrows`).
+                    const narrows = (change: TaskChange) =>
+                      dependencies.signedOutNarrows === true &&
+                      change.setting === "login" &&
+                      change.change === "signed_out";
                     if (
                       submitted.recommend === "update" &&
                       submitted.confirmedBy.length === 0 &&
                       submitted.changes.some(
                         (change) =>
                           change.setting === "site" ||
-                          change.setting === "login" ||
+                          (change.setting === "login" && !narrows(change)) ||
                           change.setting === "effect",
                       )
                     )

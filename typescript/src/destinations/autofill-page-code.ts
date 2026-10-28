@@ -217,8 +217,9 @@ export type AutofillFillCall =
       readonly fieldGet: readonly boolean[];
       /**
        * A sign-in step's submit: its guard lets a submission to a script that does nothing
-       * (`javascript:`, `javascript:void(0)`, `javascript:;`) fire by GET, since navigating there
-       * puts no entry in an address and runs nothing.
+       * (`javascript:`, `javascript:void(0)`, `javascript:;`) or to one of the React toolkit's
+       * placeholders, which only throw, fire by GET, since navigating there puts no entry in an
+       * address and sends nothing.
        */
       readonly scriptSubmit?: true;
       /** Only look: a call that finds the step's fields clicks nothing and answers `none`. */

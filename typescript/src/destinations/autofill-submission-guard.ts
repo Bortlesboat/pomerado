@@ -26,10 +26,10 @@ import { isCardSlot } from "./payment-frames.js";
  *   one-character boxes is found whole and never one character at a time; a longer code field is a
  *   code of its own. Both ignore case, since a URL's host is lowercased as it is parsed.
  * - On a sign-in step's submit (`scriptSubmit`), a submission by GET whose action is a script that
- *   does nothing (`noOpScriptCode`) is not refused for its method: navigating to such an action
- *   puts no entry in an address and runs nothing. Any other script action is refused by GET as
- *   before, its action may still not carry a filled secret, and a card-fill step's submit has no
- *   such exception.
+ *   does nothing, or one of the React toolkit's placeholders, which only throw (`noOpScriptCode`),
+ *   is not refused for its method: navigating to such an action puts no entry in an address and
+ *   sends nothing. Any other script action is refused by GET as before, its action may still not
+ *   carry a filled secret, and a card-fill step's submit has no such exception.
  * - A refused submit event is canceled. `form.submit()` fires no submit event, but its entry
  *   list's `formdata` event comes once the browser fixed the method and action; it cannot be
  *   canceled, so the guard stops the event, empties the entry list and takes the form out of the

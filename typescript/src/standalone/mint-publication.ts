@@ -456,6 +456,19 @@ export const mintPublication =
           outputs: requestedOutputFields(context.taskUpdates),
         },
         references: skillReferenceFiles(state.authoring.skills),
+        ...(publication.findingResponses === undefined
+          ? {}
+          : {
+              findingResponses: publication.findingResponses.map((answer) => ({
+                ...answer,
+                response: secrets.redact(answer.response),
+                ...(answer.evidence?.path === undefined
+                  ? {}
+                  : {
+                      evidence: { ...answer.evidence, path: secrets.redact(answer.evidence.path) },
+                    }),
+              })),
+            }),
         ...(judged.intentDerivedInput === undefined
           ? {}
           : { intentDerivedInput: judged.intentDerivedInput }),

@@ -100,9 +100,11 @@ answers `{ success, result, error, stderr }`. Throw
   settled page.
 - `waitForOutcome` already waited for its answer, so prefer no extra wait for that same answer after it.
 - A step that changes the site's own setting, such as a store, location, currency or language,
-  may redraw the page without loading a new one after the site saves it, and the element the next
-  step uses may already show before the redraw, where `waitForOutcome` counts it once unchanged
-  for 2 s. Prefer naming the new setting shown outside its dialog as that step's outcome.
+  may reload the page some time after the site saves it, or redraw it without loading a new one,
+  and the element the next step uses may already show before then, where `waitForOutcome` counts
+  it once unchanged for 2 s. If the site may reload the page some time after saving a setting,
+  name an outcome only the new page shows, such as a changed URL, and look the next element up
+  again before typing. If it only redraws, name the new setting shown outside its dialog.
 - Check the null case if possible. Make sure the tool handles a lookup or filter that matches
   nothing.
 - Start a response wait in the same call as the click that causes it: name the response as a
