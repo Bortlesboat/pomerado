@@ -1012,6 +1012,16 @@ describe("the publication policy", () => {
     expect(publicationLiveTestsPolicy).toContain(` ${rule} `);
   });
 
+  // A gap the build can close itself, such as a case on another record it reaches through the
+  // site's own search, goes to the minter as a case to add, not to the owner as a scope question.
+  it("sends a gap the minter can close to the minter, not the owner", () => {
+    const rule =
+      "When the minter can close such a gap itself, such as with a passing case on another record the tool's inputs already claim, reached through the site's own search, listings or links, prefer naming that case for the minter to add over asking the owner to confirm or authorize the tool's scope; prefer asking the owner only for a choice only the owner can make, such as spending money, cutting the tool's scope or a sign-in.";
+    expect(publicationLiveTestsPolicy).toContain(
+      `naming what no case tests, so the minter runs or fixes the cases. ${rule} `,
+    );
+  });
+
   // A site's own "Remember me" choice left at its default keeps the owner's session for later
   // runs. It is not a safety default, so neither review denies the host's sign-in step over it.
   it("leaves a site's own Remember me choice at its default in both reviews", () => {
