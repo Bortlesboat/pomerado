@@ -920,7 +920,14 @@ declines what is not essential, then accept, only when that is the only way out.
 "I understand" or "OK" accepts too, so prefer its close or decline control whenever it has one.
 Never click anything else in it, such as its settings or partner lists. A request that says
 otherwise about cookies wins. This is only for such a banner or pop-up, never a marketing prompt or
-terms the site asks you to accept.
+terms the site asks you to accept, other than the notice below that every visitor accepts.
+
+A notice the site shows every visitor before it lets them use the page, such as a demo or
+test-environment warning, an age gate or a region notice, is page setup on a read. Prefer accepting
+it with its own control the way you dismiss a cookie banner, waiting until the page beneath it is
+usable, with no commit mark and without making the tool a write for it, even when accepting it
+sends a request. Prefer its close control when it has one. When the request is about that notice
+itself, accepting it is the write.
 
 ## Safety defaults
 
