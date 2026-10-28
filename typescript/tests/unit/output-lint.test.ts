@@ -601,6 +601,26 @@ describe("advisory checks of the declared schemas", () => {
     ]);
   });
 
+  it("flags a text field whose description or currency name promises a notation its schema does not hold", () => {
+    const output = contractJsonSchema(
+      Schema.Struct({
+        due: Schema.NonEmptyTrimmedString.annotations({ description: "Due date, YYYY-MM-DD" }),
+        paid_on: Schema.NullOr(Schema.String.annotations({ description: "Payment date as ISO 8601, null when unpaid" })),
+        currency: Schema.NonEmptyTrimmedString,
+        due_label: Schema.NonEmptyTrimmedString.annotations({ description: "The site's wording of the due date (due holds YYYY-MM-DD)" }),
+        held: date.annotations({ description: "Issue date, YYYY-MM-DD" }),
+        held_currency: Schema.Literal("USD", "EUR").annotations({ description: "ISO 4217 code" }),
+        stamped: Schema.String.annotations({ description: "Last change, ISO 8601", jsonSchema: { format: "date-time" } }),
+        total_minor: Schema.Int.annotations({ description: "Total in minor units of the ISO 4217 currency" }),
+      }),
+    );
+    expect(
+      schemaChecks(undefined, output)
+        .filter((finding) => finding.endsWith("unheld_format"))
+        .sort(),
+    ).toEqual(["currency unheld_format", "due unheld_format", "paid_on unheld_format"]);
+  });
+
   it("follows nested objects, arrays, references and nullable unions", () => {
     const Leg = Schema.Struct({ carrier: Schema.String, code: Schema.NonEmptyTrimmedString });
     const output = contractJsonSchema(
@@ -776,6 +796,58 @@ describe("output notation checks", () => {
     for (const updated of ["2026-03-14T15:05:00Z", "2026-03-14T15:05:00.250-07:00", "2026-03-14T15:05+05:30"])
       expect(checksOf({ due: "2026-03-14", updated }, { outputSchema: dated })).toEqual([]);
     expect(checksOf({ due: "Mar 14, 2026" })).toEqual([]);
+  });
+
+  const described = contractJsonSchema(
+    Schema.Struct({
+      flights: Schema.Array(
+        Schema.Struct({
+          departure_date: Schema.NonEmptyTrimmedString.annotations({ description: "Departure date, YYYY-MM-DD" }),
+          departure_date_label: Schema.NonEmptyTrimmedString.annotations({
+            description: "The date as the site writes it; departure_date holds it as YYYY-MM-DD",
+          }),
+          departs_at: Schema.String.annotations({ description: "Departure time, ISO 8601 with its offset" }),
+          fare_currency: Schema.String.annotations({ description: "ISO 4217 code of the fare's currency" }),
+          currency: Schema.String,
+        }),
+      ),
+    }),
+  );
+
+  it("flags a value in another notation than its description names, and a currency that is no code", () => {
+    const flight = {
+      departure_date: "Nov 16, 2026",
+      departure_date_label: "Mon, Nov 16",
+      departs_at: "7:00 AM",
+      fare_currency: "US$",
+      currency: "$",
+    };
+    expect(checksOf({ flights: [flight] }, { outputSchema: described }).sort()).toEqual([
+      "flights[].currency format_mismatch",
+      "flights[].departs_at format_mismatch",
+      "flights[].departure_date format_mismatch",
+      "flights[].fare_currency format_mismatch",
+    ]);
+  });
+
+  it("leaves values in the notation their description names, and the site's own wording beside them, alone", () => {
+    for (const departs_at of ["2026-11-16T07:00:00-08:00", "07:00", "2026-11-16"])
+      expect(
+        checksOf(
+          {
+            flights: [
+              {
+                departure_date: "2026-11-16",
+                departure_date_label: "Mon, Nov 16",
+                departs_at,
+                fare_currency: "USD",
+                currency: "EUR",
+              },
+            ],
+          },
+          { outputSchema: described },
+        ),
+      ).toEqual([]);
   });
 
   it("flags a list field whose values differ only by letter case", () => {

@@ -11,7 +11,7 @@ script from a reset start by running its example until it works (re-running a re
 example is normal); resolve its missing choices with reads when possible. A write build
 does the caller's requested task once, live (in as many write steps as it takes), then
 composes its script from what happened (the `writes` skill). A read tests what its example
-did not exercise with a few combined live cases (the `testing` skill). A write proves its tool
+did not exercise with combined live cases, a wide, varied batch when signed out (the `testing` skill). A write proves its tool
 with its act session; it never reads
 the `testing` skill or designs further tests<!-- pomerado:section core.write-http-check -->.
 That forbids running the write again or testing it live, not writing checks: a write's script
@@ -362,8 +362,10 @@ exception: it is optional unless the task can't run without it (below).
   booleans named as statements (`refundable`, not `is_refundable_flag`); lists named in the
   plural; and the unit in the field name or its description (`duration_minutes`). Convert
   between these and the site's own formats in code. The output check flags a date or timestamp
-  not in the form its field declares (`format_mismatch`) and one value in two letter cases
-  across a list (`case_variant`).
+  not in the form its field declares, a value in another notation than its description names
+  and a currency that is not an ISO 4217 code (`format_mismatch`), a field whose description
+  promises such a notation that no `pattern` holds (`unheld_format`), and one value in two
+  letter cases across a list (`case_variant`).
 - When `reference/site-tools.json` exists, you can view the site's other tools. Read
   `reference/site-tools/README.md` first: it indexes them, one folder each, with each tool's
   effect, sign-in and a short description. Then read the folders you need: each holds a
@@ -651,7 +653,12 @@ site's own data request<!-- pomerado:section core.data-request-reference -->, to
 each record's detail page, keep each to a few calls (open, wait, one read), and consider whether
 the request is better served as two tools, a search and a details read by identifier; say so in
 `coverage`. Prefer opening those detail pages only for the rows the call returns, after
-`readList`, not inside the list reader (pagination skill).
+`readList`, not inside the list reader (pagination skill). When a call needs many independent
+lookups or detail reads, such as one for each returned row, prefer running them in parallel
+batches over one after another, such as the site's own data request for each row sent together
+in one `evaluate`. Send no more at once than the build showed the site handling without refusing
+or challenging, and fewer, spaced out, where it refused or challenged; a block at run time still
+fails the call, as the 429 rule above says.
 Prefer the page's own structured data, its embedded JSON or the data response it renders from,
 to its rendered cards when it holds the same fields for the same records, and check on the
 example that it matches what the page shows. Embedded JSON holds the page as first rendered:
