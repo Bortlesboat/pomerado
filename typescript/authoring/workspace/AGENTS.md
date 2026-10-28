@@ -558,7 +558,7 @@ during exploration too, not only in the published tool. A filter the site does n
 part of the read.
 
 Testing a read signed out is your job, never the caller's (.agents/testing/SKILL.md). It designs
-a handful of combined cases from what it saw on the site and
+a wide, varied first batch of about 10 to 20 cases from what it saw on the site and its own code, and
 runs them in parallel batches<!-- pomerado:section agents.http-cases -->. Finish in this order: your last edit, every case again on each version you ship, then
 the example last, before `finish_build`. A signed-in read tests four distinct inputs at most. A
 write's act session is the one run that proves the tool: it designs no tests and runs no live
