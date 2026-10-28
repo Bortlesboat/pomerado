@@ -19,9 +19,9 @@ import type { HttpFailure, SiteHttpRequest, SiteHttpResult, SiteHttpService } fr
  * - A block stops the batch at once, and nothing more is sent: a challenge page the host found, a
  *   403 that is not JSON, a 503 HTML page where JSON was asked for, or a 2xx HTML page where JSON
  *   was asked for. It never retries through a block; the challenge and proxy paths deal with it.
- * - Reads only: a request marked `write: true`, or a PUT, PATCH or DELETE, refuses the whole batch
- *   before anything is sent. A POST the site uses to read, such as a search or a GraphQL query,
- *   is a read.
+ * - Reads only: a request marked `write: true`, or with any method but GET, HEAD, OPTIONS and
+ *   POST, refuses the whole batch before anything is sent. A POST the site uses to read, such as a
+ *   search or a GraphQL query, is a read.
  * - Results come back in input order, one for every request, never dropped: an answer, a failure,
  *   or `not_sent` for each request a stop kept back.
  */
@@ -218,19 +218,20 @@ export function classifyBatchAnswer(
 export function batchRetryAfterMs(header: string | null | undefined, nowMs: number): number | undefined {
   const text = (header ?? "").trim();
   if (text === "") return undefined;
-  if (/^\d+$/.test(text)) return Number(text) * 1000;
+  if (/^\d+(\.\d+)?$/.test(text)) return Math.round(Number(text) * 1000);
   const at = Date.parse(text);
   return Number.isNaN(at) ? undefined : Math.max(0, at - nowMs);
 }
 
-const writeMethods = new Set(["PUT", "PATCH", "DELETE"]);
+/** The methods a batch may send; any other is a write. */
+const readMethods = new Set(["GET", "HEAD", "OPTIONS", "POST"]);
 
-/** The index and method of the first request that is a write, if any. */
+/** The index and method of the first request that is a write or not a read method, if any. */
 const firstWrite = (
   requests: readonly { readonly method?: string | undefined; readonly write?: boolean | undefined }[],
 ) => {
   const index = requests.findIndex(
-    (request) => request.write === true || writeMethods.has((request.method ?? "GET").toUpperCase()),
+    (request) => request.write === true || !readMethods.has((request.method ?? "GET").toUpperCase()),
   );
   return index === -1 ? undefined : { index, method: requests[index]?.method ?? "GET" };
 };
@@ -417,7 +418,7 @@ export const batchRead = (
  */
 export const batchFetchCode = String.raw`
 const batchFetch = async (requests, options = {}) => {
-  const writeAt = requests.findIndex((request) => request.write === true || ["PUT", "PATCH", "DELETE"].includes(String(request.method ?? "GET").toUpperCase()));
+  const writeAt = requests.findIndex((request) => request.write === true || !["GET", "HEAD", "OPTIONS", "POST"].includes(String(request.method ?? "GET").toUpperCase()));
   if (writeAt !== -1) {
     const refused = new Error("batchFetch sends reads only, and request " + writeAt + " is a write. Nothing was sent.");
     refused.name = "BatchFetchRefused";

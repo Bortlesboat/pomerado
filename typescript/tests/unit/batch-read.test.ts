@@ -131,6 +131,18 @@ describe("batchRead", () => {
     expect(bodies(result.items)).toEqual(Array.from({ length: 12 }, (_, id) => ({ id })));
   });
 
+  it("honours a Retry-After given in fractional seconds", async () => {
+    const site = scriptedSite((url) =>
+      url === itemUrl(1)
+        ? [{ status: 429, headers: { "retry-after": "1.5" } }, json({ id: 1 })]
+        : [json({ id: idOf(url) })],
+    );
+    const { clock, waits } = fakeClock();
+    const result = await Effect.runPromise(batchRead(site.http, reads(4), { clock }));
+    expect(waits).toEqual([1500]);
+    expect(bodies(result.items)).toEqual([0, 1, 2, 3].map((id) => ({ id })));
+  });
+
   it("stops at a challenge and sends nothing more", async () => {
     const site = scriptedSite((url) =>
       url === itemUrl(5) ? [{ status: 200, challenge: true, body: "<html>" }] : [json({ id: idOf(url) })],
@@ -171,6 +183,8 @@ describe("batchRead", () => {
     for (const write of [
       { url: itemUrl(1), method: "PUT" as const },
       { url: itemUrl(1), method: "POST" as const, body: "{}", write: true },
+      // A method outside GET, HEAD, OPTIONS and POST is a write too, however it is spelled.
+      { url: itemUrl(1), method: "MKCOL" as unknown as "GET" },
     ]) {
       const outcome = await Effect.runPromise(
         Effect.either(batchRead(site.http, [...reads(2), write])),
@@ -218,12 +232,13 @@ describe("batchFetch in the page", () => {
     ]);
   });
 
-  it("refuses a write before anything is sent", async () => {
+  it("refuses a write, or any method but GET, HEAD, OPTIONS and POST, before anything is sent", async () => {
     const site = scriptedSite(() => [json({})]);
     vi.stubGlobal("fetch", site.fetch);
-    await expect(
-      runBatchFetch([{ url: itemUrl(0) }, { url: itemUrl(1), method: "DELETE" }]),
-    ).rejects.toMatchObject({ name: "BatchFetchRefused" });
+    for (const method of ["DELETE", "PURGE", "mkcol"])
+      await expect(
+        runBatchFetch([{ url: itemUrl(0) }, { url: itemUrl(1), method }]),
+      ).rejects.toMatchObject({ name: "BatchFetchRefused" });
     expect(site.sent).toEqual([]);
   });
 });
