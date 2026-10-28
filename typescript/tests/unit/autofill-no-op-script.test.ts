@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { noOpScriptCode } from "../../src/destinations/autofill-locate-code.js";
 
-const noOpScript = (0, eval)(noOpScriptCode) as (address: unknown) => boolean;
+const noOpScript = (0, eval)(noOpScriptCode) as (address: unknown, formAction?: boolean) => boolean;
 
 // Only a script action that does nothing is the page's own script submit. Any other script runs
 // what its address says, so its form is judged as any form whose action is off the site.
@@ -26,6 +26,15 @@ it.each([
   "javascript:%EF%BB%BFvoid(0)",
 ])("counts %j as a script action that does nothing", (address) => {
   expect(noOpScript(address)).toBe(true);
+});
+
+// The React toolkit's placeholder on a form whose submit its own code handles counts as a form's
+// own script submit too.
+it.each([
+  "javascript:throw new Error('React form unexpectedly submitted.')",
+  'javascript:throw new Error("React form unexpectedly submitted.")',
+])("counts %j as a form's own script submit", (address) => {
+  expect(noOpScript(address, true)).toBe(true);
 });
 
 it.each([
