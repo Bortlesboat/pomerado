@@ -204,10 +204,25 @@ const outcomeWaitEvents = (candidates) => {
           failure ??= error;
         },
       );
-  if (of("url").length > 0)
+  // The main frame's document request still on its way, a reload's included, from when it started
+  // until its new document commits, it fails, or it answers with no document to show.
+  let navigation;
+  if (of("url").length > 0 || of("locator").length > 0 || of("invalid").length > 0) {
     on("framenavigated", (frame) => {
-      if (frame === page.mainFrame()) navigatedAt = Date.now();
+      if (frame !== page.mainFrame()) return;
+      navigatedAt = Date.now();
+      navigation = undefined;
     });
+    on("request", (request) => {
+      if (request.isNavigationRequest() && request.frame() === page.mainFrame()) navigation = { request, at: Date.now() };
+    });
+    on("requestfailed", (request) => {
+      if (navigation?.request === request) navigation = undefined;
+    });
+    on("response", (response) => {
+      if (navigation?.request === response.request() && [204, 205].includes(response.status())) navigation = undefined;
+    });
+  }
   if (of("response").length > 0)
     on("response", (response) => {
       seen.response += 1;
@@ -243,6 +258,9 @@ const outcomeWaitEvents = (candidates) => {
     hit: (name) => hits.get(name),
     seen: (kind) => seen[kind],
     navigatedSince: (at) => navigatedAt >= at,
+    // A navigation of the main frame that started at or after at is on its way: its old document
+    // still shows.
+    navigating: (at) => navigation !== undefined && navigation.at >= at,
     dialogOpen: () => dialog !== undefined,
     dialog: () => dialog,
     unnamedDialog: () => unnamedDialog,
