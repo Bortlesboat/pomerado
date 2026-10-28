@@ -16,12 +16,13 @@ const receipt = "Receipt 1042\nTotal 12.50\n";
 /**
  * Serves one tool over MCP in this process, keeping downloads under `downloads`: by default the
  * receipt write, or a read with `source` that takes a receipt and returns what it placed, under
- * the host's file `limits` when given.
+ * the host's file `limits` when given. `inputSchema` replaces the published input schema.
  */
 const serve = async (
   url: string,
   downloads: string,
   read?: { readonly source: string; readonly limits?: FileLimits },
+  inputSchema: unknown = contractJsonSchema(Schema.Struct({ receipt: FileInput })),
 ) => {
   const scope = Effect.runSync(Scope.make());
   const server = await Effect.runPromise(
@@ -29,7 +30,7 @@ const serve = async (
       artifact: {
         files: [{ path: "src/tool.mjs", content: read?.source ?? receiptTool() }],
         entrypoint: "src/tool.mjs",
-        inputSchema: contractJsonSchema(Schema.Struct({ receipt: FileInput })),
+        inputSchema,
         outputSchema:
           read === undefined
             ? contractJsonSchema(Schema.Struct({ received: Schema.String, statement: FileOutput }))
@@ -361,6 +362,168 @@ test("a download over the host's caps fails the run as the host's limit, never a
       status: "failed",
       code: "execution_failed",
     });
+  } finally {
+    for (const tool of tools) await tool.close();
+    await site.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+/**
+ * The receipt input's published schema with the limits a site states for the file, as a tool's
+ * `fileInputWithin` declares them: `maxBytes` and `extensions` beside `format: "file"`.
+ */
+const limitedReceipt = (limits: Record<string, unknown>) => {
+  const schema = contractJsonSchema(Schema.Struct({ receipt: FileInput })) as {
+    properties: Record<string, Record<string, unknown>>;
+  };
+  return {
+    ...schema,
+    properties: { ...schema.properties, receipt: { ...schema.properties["receipt"], ...limits } },
+  };
+};
+
+test("a run refuses a caller's file outside the limits its tool declares for the input before it opens any page, and uploads one within them", async () => {
+  test.info().annotations.push({
+    type: "slow",
+    description: "Three runs of one write, one of them uploading through Chromium",
+  });
+  test.setTimeout(90_000);
+  const site = await startFileSite();
+  const directory = await mkdtemp(join(tmpdir(), "pomerado-files-qa-"));
+  const write = async (name: string, bytes: number) => {
+    const path = join(directory, name);
+    await writeFile(path, "a".repeat(bytes));
+    return pathToFileURL(path).href;
+  };
+  const megabyte = 1024 * 1024;
+  const over = await write("over.txt", 2 * megabyte);
+  const within = await write("within.txt", megabyte / 2);
+  const notTaken = await write("within.csv", megabyte / 2);
+  const downloads = join(directory, "downloads");
+  // The write downloads the statement, then uploads the receipt: today a file over the site's
+  // limit got past the download to the upload, which the host's 25 MiB cap let through.
+  const served = await serve(
+    site.url,
+    downloads,
+    undefined,
+    limitedReceipt({ maxBytes: megabyte, extensions: [".txt", ".PDF"] }),
+  );
+  const call = (receipt: string, key: string) =>
+    settled(
+      served.client,
+      served.client.callTool({
+        name: "send_receipt",
+        arguments: { input: { receipt }, idempotency_key: key },
+      }),
+    );
+  try {
+    for (const [reference, key, limit] of [
+      [over, "over", `${megabyte} bytes`],
+      [notTaken, "type", ".txt, .PDF"],
+    ] as const) {
+      const refused = await call(reference, key);
+      expect(refused.isError, JSON.stringify(refused)).toBe(true);
+      // The caller's input is refused, and no write was entered.
+      expect(refused.structuredContent, JSON.stringify(refused)).toMatchObject({
+        status: "failed",
+        code: "input_rejected",
+        write_status: "not_attempted",
+        possible_commit: false,
+        retry: "fix_input",
+      });
+      expect(JSON.stringify(refused.structuredContent)).toContain("Caller input error: receipt");
+      expect(JSON.stringify(refused.structuredContent)).toContain(limit);
+    }
+    // Neither run reached the site: no page load, no download, no upload.
+    expect(site.requested).toEqual([]);
+    expect(site.received).toEqual([]);
+    const sent = await call(within, "within");
+    expect(sent.isError, JSON.stringify(sent)).toBeFalsy();
+    expect(site.received).toMatchObject([{ name: "within.txt", size: megabyte / 2 }]);
+  } finally {
+    await served.close();
+    await site.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+/**
+ * A read tool that opens the page whose file input uploads a file the moment it holds one, and
+ * places its receipt there with `limits` as the call's options, returning the placement or why
+ * it was refused.
+ */
+const dropTool = (limits: Record<string, unknown>) => `import { Schema } from "effect";
+import { defineOperation, FileInput } from "../runtime/index.js";
+export default defineOperation({name:"drop_receipt",input:Schema.Struct({receipt:FileInput}),output:Schema.Unknown},
+async ({kernel,sessionId,input,files}) => {
+  const opened = await kernel.browsers.playwright.execute(sessionId,{code:"await page.goto(new URL('/drop', page.url()).href); return true;",timeout_sec:10});
+  if (!opened.success) throw new Error(String(opened.error));
+  try {
+    return { placed: await files.place(input.receipt, { field: { label: "Drop" }, ...${JSON.stringify(limits)} }) };
+  } catch (error) {
+    return { refused: error.message, name: error.name, dispatch: error.dispatch ?? null };
+  }
+});`;
+
+test("files.place refuses a file outside the limits its call names before it sets the input", async () => {
+  test.info().annotations.push({
+    type: "slow",
+    description: "Four native runs on a page that uploads a file once its input holds one",
+  });
+  test.setTimeout(120_000);
+  const site = await startFileSite();
+  const directory = await mkdtemp(join(tmpdir(), "pomerado-files-qa-"));
+  const write = async (name: string, bytes: number) => {
+    const path = join(directory, name);
+    await writeFile(path, "a".repeat(bytes));
+    return pathToFileURL(path).href;
+  };
+  const megabyte = 1024 * 1024;
+  const over = await write("over.txt", 2 * megabyte);
+  const within = await write("within.txt", megabyte / 2);
+  const downloads = join(directory, "downloads");
+  const tools = await Promise.all(
+    [
+      { maxBytes: megabyte },
+      { extensions: [".pdf"] },
+      { maxBytes: -1 },
+      { maxBytes: megabyte, extensions: [".TXT"] },
+    ].map((limits) => serve(site.url, downloads, { source: dropTool(limits) })),
+  );
+  const [capped, pdfOnly, invalid, fits] = tools;
+  const call = (tool: Awaited<ReturnType<typeof serve>> | undefined, receipt: string) => {
+    if (tool === undefined) throw new Error("No tool");
+    return settled(
+      tool.client,
+      tool.client.callTool({ name: "send_receipt", arguments: { input: { receipt } } }),
+    );
+  };
+  try {
+    // A refusal of the caller's file is its invalid input, and the input was never set: the page
+    // would have uploaded the file at once.
+    expect((await call(capped, over)).structuredContent).toEqual({
+      refused: "The host refused the file: too_large",
+      name: "InvalidInput",
+      dispatch: null,
+    });
+    expect((await call(pdfOnly, within)).structuredContent).toEqual({
+      refused: "The host refused the file: not_accepted",
+      name: "InvalidInput",
+      dispatch: null,
+    });
+    // Limits the script wrote wrongly are its own failure, which sent nothing.
+    expect((await call(invalid, within)).structuredContent).toMatchObject({
+      refused: expect.stringContaining("files.place takes maxBytes"),
+      name: "OperationFailure",
+      dispatch: "not_sent",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(site.received).toEqual([]);
+    expect((await call(fits, within)).structuredContent).toEqual({
+      placed: { name: "within.txt", media_type: "text/plain", size: megabyte / 2 },
+    });
+    await expect.poll(() => site.received.length).toBe(1);
   } finally {
     for (const tool of tools) await tool.close();
     await site.close();

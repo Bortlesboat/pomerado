@@ -194,17 +194,19 @@ runtime's `FileInput`; the caller's file reaches the build as a `{{file.fN}}` ha
 the input, with its name, type and size in the request's `files`. Pass the input's value
 as given to `files.place(input.receipt, { field: { label: "Receipt" } })`; `field` names
 the `<input type="file">` as data, its label or a `selector`, never code. The host checks
-the file and puts it there, and never anywhere else. Return a download as a `FileOutput`
-from `files.collect(trigger)`, where `trigger` makes the execute call that starts it; you
-see only its name, type, size and sha256. While the tool is being built, the file has no
-download_url or expires_at; the published tool's runs add them. Prefer returning the file as
-collected, and never require those fields in code. A downloaded file meant for the caller goes
-through `files.collect`. Never write a handle in source, set file inputs, handle downloads
-yourself, route the page's requests or read a file's contents back (`.files` items,
-`FileReader`, `FormData`, a request body): the host refuses such source. An older tool that
-sets a file input from base64 input with `setInputFiles` uses a deprecated pattern the host
-still allows while the build has no file handle and no `FileInput`: a repair keeps its input
-as it is, and a new tool takes a `FileInput` and uses `files.place`.
+the file and puts it there, and never anywhere else. When the site states a file limit, prefer
+declaring it on the input, as `fileInputWithin({ maxBytes: 5_242_880, extensions: [".pdf"] })`,
+and passing it to `files.place`, rather than checking the file in code. Return a download
+as a `FileOutput` from `files.collect(trigger)`, where `trigger` makes the execute call that
+starts it; you see only its name, type, size and sha256. While the tool is being built, the
+file has no download_url or expires_at; the published tool's runs add them. Prefer returning
+the file as collected, and never require those fields in code. A downloaded file meant for
+the caller goes through `files.collect`. Never write a handle in source, set file inputs,
+handle downloads yourself, route the page's requests or read a file's contents back
+(`.files` items, `FileReader`, `FormData`, a request body): the host refuses such source. An
+older tool that sets a file input from base64 input with `setInputFiles` uses a deprecated
+pattern the host still allows while the build has no file handle and no `FileInput`: a
+repair keeps its input as it is, and a new tool takes a `FileInput` and uses `files.place`.
 
 Some sites' Download or Share button only prints the page, through `window.print` or a print
 frame in the site's code, and offers no file. Prefer checking the site's code or page before
