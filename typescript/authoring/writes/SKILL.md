@@ -205,6 +205,12 @@ During the session:
   that exists only on the page mid-flow, such as a seat on the flight just chosen, is
   a declared `ask` in the next `act` step's script (the caller-input skill). An
   answered question settles the option. Check the page again before continuing.
+- A code the site sends during the write, signed out too, such as one confirming an email or
+  phone the form took, belongs to the write, not a sign-in: prefer a `secret` question of kind
+  `one_time_code` that the next `act` step's script asks, as the caller-input skill's code
+  example does, over `authenticate`. A code screen that signs you in, such as one a checkout
+  opens to sign in and continue, is still `authenticate`, even partway through a write (auth
+  skill).
 
 ## The session
 
@@ -595,6 +601,10 @@ a step that may have committed only once, unless the outcome review finds it did
 Filling a form or an offline example
 is not the write. An unreadable step output never justifies a run either: the write
 publishes with its output recorded as unavailable.
+
+In a write build, after a verified write, if the site does not offer one output the request
+asks for, prefer asking the caller once with `request_input` whether to publish the tool with
+that output null and a reason field, rather than ending blocked; never invent the value.
 
 After a `not_published`, live `act` steps are open again while the write session is still
 open (a commit that recorded its confirmation stays done), on the same browser, still signed

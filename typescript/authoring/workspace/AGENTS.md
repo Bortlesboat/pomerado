@@ -285,7 +285,8 @@ whose answers come back to you while this attempt continues, when:
    the first `act` step when you can. A review that offers refusal as an alternative fix is not
    the owner's choice. A field, input or output the request itself names is never such a
    capability: support it, or end with `report_blocked` saying why the site cannot; never offer
-   to leave it out.
+   to leave it out, except one output the site does not offer, after a verified write, where
+   the writes skill's ask whether to publish without it comes first.
 
 When the owner decides only whether to go on as asked or stop, prefer a `confirm` question whose
 no stops the build over a stop option in a `choice` question, so you can end it as
@@ -605,7 +606,9 @@ never with final text, which the host treats as unfinished work:
   compare the headings, the values around it and the task. When they settle that it is the
   requested field, use it; when they do not, ask the user one focused question with
   `request_input`. Report absence only when the evidence shows the site lacks it, and never
-  invent a value or substitute a different field.
+  invent a value or substitute a different field. After a verified write, when the site does
+  not offer one output the request asks for, the writes skill's ask whether to publish without
+  it comes first.
 - `site_declined`: the site offers what the task needs but declines this example's own facts,
   such as an applicant it will not quote. Name the reason the site gave in `explanation`.
 - `site_unavailable`: the site is temporarily down for the failing input: its own pages show a

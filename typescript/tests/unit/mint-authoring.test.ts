@@ -919,6 +919,29 @@ it("has a write confirm from its first matching read-back, never from state befo
 });
 
 /*
+ * A write that issued a document confirmed it by reading it back, then found that the site sends
+ * one of the two requested files by email only and offers no way to fetch it. With every
+ * requested output required and blocked as the only ending for one the site lacks, the build
+ * ended with no tool although its one real write was done. After a verified write, it asks the
+ * caller once whether to publish with that output null and a reason, and never fills it in.
+ */
+it("has a write ask once to publish without an output the site does not offer, after its verified write", async () => {
+  const texts = await renderedTexts("typescript/authoring");
+  expect((texts.get("writes") ?? "").replace(/\s+/g, " ")).toContain(
+    "In a write build, after a verified write, if the site does not offer one output the request asks for, prefer asking the caller once with `request_input` whether to publish the tool with that output null and a reason field, rather than ending blocked; never invent the value.",
+  );
+  // The blocked ending for a capability the site lacks points to that ask first.
+  const guide = (texts.get("workspace/AGENTS.md") ?? "").replace(/\s+/g, " ");
+  expect(guide).toContain(
+    "never invent a value or substitute a different field. After a verified write, when the site does not offer one output the request asks for, the writes skill's ask whether to publish without it comes first.",
+  );
+  // So does the rule that never offers to leave out an output the request names.
+  expect(guide).toContain(
+    "A field, input or output the request itself names is never such a capability: support it, or end with `report_blocked` saying why the site cannot; never offer to leave it out, except one output the site does not offer, after a verified write, where the writes skill's ask whether to publish without it comes first.",
+  );
+});
+
+/*
  * A write marked opening a form and typing an address as commits, then waited only for the
  * address suggestions. For an address outside the area the site serves, the site showed a notice
  * instead, so the run timed out with two marks entered and reported a possible change when
@@ -1266,17 +1289,17 @@ it("renders the pinned standalone authoring", async () => {
       .filter(([path]) => path !== "reference/publication-review.md")
       .map(([path, text]) => [sha256(text), `workspace/${path}`]),
   ]).toStrictEqual([
-    ["5f3af5401fa484e56cd4eaeca41da8ba04cb9ded455ffc46263e659a05e2d54e", "core"],
+    ["49aee4b7daf31e854d7328cca98525e21f59329c2e3e761162f2ee8684ca8196", "core"],
     ["933e2daac360d31beeeb2a8aeabcf22ca8512cc0272f321b047106f4a2055ab3", "search"],
-    ["cec5bca01bf057a95faaab07e25c02e3d0b9329e66d6df97b6744f81ab421bf7", "auth"],
+    ["930550863b9f83e98719b77bc149b20e70b526a88a16dd758d44ab20d048d8cb", "auth"],
     ["ad5b4f8391094f6d7c8ff4a480b071bb298807da9523971e0aaf7d719f152664", "testing"],
     ["2b559ad88157f28be2a054787f4c736cf192bb825760bdf3050c01a59d060ba8", "pagination"],
-    ["4d05ffc26a395fafb591bb8ac593b79ae7450f21f26ac8709cbbe543fc2453df", "forms"],
-    ["ae84ba5cd3c71b639c886e82930f9c7f022b88583380ca208e13dd7788eb2170", "writes"],
+    ["9bdfbeacd87c777734e2f2fb3fc934676433a5e7881980000f2c25706ac6d66c", "forms"],
+    ["3a907b1f23f0f637f30adad9939751c9052a540fa182d14ed412bb071cac68d1", "writes"],
     ["d06f650fc09f74d3711e043da2303de97ced42c9ff2541d48ec28cd7e686519d", "cart"],
-    ["3b3b87ecb3d9c219037c250212bdc3eab72fc8c1388b07c0aab12f8c4f7a9ce6", "caller-input"],
+    ["b6dd72d69c30ac9a1818ac1baeae48e701cd318f04d11e04ef8c03d812b91a16", "caller-input"],
     ["fb7cd6b0929612a94dd6e0a3c54fa42e102ada77ccd83059fe818a01d8307cf0", "publication"],
-    ["e6a91d90cd515385aa8a7073a5435ac00a4f2dbaaa045cffd3b290e9b497dc91", "workspace/AGENTS.md"],
+    ["a319737c69647bb215186a1ab88fb61edfff11c6cc6cec6fb582b490d1bae10a", "workspace/AGENTS.md"],
     ["9501ae9c273d5d4db8976a544879f7aee44212c8a616b00e74263dcd3c593035", "workspace/README.md"],
   ]);
 });
@@ -1397,7 +1420,7 @@ it("renders the search URL fast path only when a host turns it on", async () => 
     [sha256(on.agents), "workspace/AGENTS.md"],
   ]).toStrictEqual([
     ["0386d3e23fb8cd652f7c64320b940b6a61c7ed9fb3315579fe5521c835789b42", "search"],
-    ["8cdb4e10da001832e65d3d6693de61d85ddfcbcc0c78a4b87fa6d5f5766bb218", "workspace/AGENTS.md"],
+    ["d10403f4fe86cdbe179b2ef53376a14c053fdbe7d151b31fb18018843b1141d5", "workspace/AGENTS.md"],
   ]);
   expect(on.digests.filter(([, name]) => name !== "search")).toStrictEqual(
     off.digests.filter(([, name]) => name !== "search"),

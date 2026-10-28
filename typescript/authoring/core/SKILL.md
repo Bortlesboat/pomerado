@@ -1003,7 +1003,7 @@ element learns nothing a count would not. Return `waitReport()` from a probe tha
 Supported login challenges during `authenticate` belong to the host's sign-in
 (autofill or an explicit direct HTTP step) and its protected input requests. Generated `operation.run` and `explore` code
 never request or enter a sign-in code, or sign in themselves: a code that is part of signing in
-belongs to the `authenticate` step (auth skill). A code the site sends later, to confirm a protected action after sign-in, is different:
+belongs to the `authenticate` step (auth skill). A code the site sends later, to confirm a protected action after sign-in or partway through a write, signed out too (writes skill), is different:
 declare it as a `secret` question and ask it with `ask`, as the caller-input skill's
 `caller-code.ts` shows. A missing ordinary page
 control alone does not establish a human-verification challenge. Observe the

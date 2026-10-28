@@ -147,8 +147,9 @@ Try first. Ask only for what the page or the caller uniquely knows at that point
   offers alternatives for: prefer not starting a refusal of either with "Caller input error:"
   (above). A day or option the page greys out, with or without a reason, is not ambiguous and
   never a question (core skill, "Configure, then read");
-- a code the site sends to confirm a protected action after sign-in, such as a confirmation code
-  by text or email, never a code that is part of signing in (auth skill);
+- a code that is not part of signing in (auth skill): another code the site sends to confirm a
+  protected action after sign-in, or a code the site sends during a write, signed out too
+  (writes skill), such as a confirmation code by text or email;
 - a fact only the caller has that the site now asks for.
 
 Never ask for a value the request, the input or an earlier answer already supplied, a private
@@ -197,9 +198,10 @@ already asked for, or to solve a CAPTCHA.
      at least one unless `minSelections` says otherwise, at most the options offered.
    - `{ type: "text", prompt, maxLength? }`: free text.
    - `{ type: "confirm", prompt, followUp? }`: yes or no, returned as `{ confirmed }`.
-   - `{ type: "secret", secretKind, prompt, maxLength? }`: a code the site sent to
-     confirm an action after sign-in (`one_time_code`; a code that is part of signing
-     in is a `code` field of the `authenticate` step, never a question), an
+   - `{ type: "secret", secretKind, prompt, maxLength? }`: a code the site sent that is
+     not part of signing in, to confirm an action after sign-in or during a write, signed
+     out too (`one_time_code`; a code that is part of signing in is a `code` field of the
+     `authenticate` step, never a question), an
      authenticator code (`totp`, which a saved login's TOTP fills without asking) or
      other private text (`private_text`). It stays out of traces,
      logs and the minting model. A secret you ask during the build with `request_input`

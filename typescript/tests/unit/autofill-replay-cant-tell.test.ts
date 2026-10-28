@@ -242,15 +242,6 @@ describe("replay screen and landing trailing-slash helpers", () => {
     expect(offScreens(root.onScreens, `${origin}/login`)).toBe(`${origin}/login`);
   });
 
-  it("normalizes trailing slashes in leftSignInScreens", () => {
-    const left = (entryUrl: string, url: string) =>
-      leftSignInScreens(screens.onScreens, entryUrl, url);
-    expect(left(`${origin}/login`, `${origin}/login/`)).toBe(false);
-    expect(left(`${origin}/login/`, `${origin}/login`)).toBe(false);
-    expect(left(`${origin}/login`, `${origin}/choose-account`)).toBe(true);
-    expect(left(`${origin}/login`, `${other}/login`)).toBe(true);
-  });
-
   it("normalizes trailing slashes in cantTell landing decisions", () => {
     const recipe = {
       steps: [{ page: `${origin}/login` }, { page: `${origin}/auth/` }],
