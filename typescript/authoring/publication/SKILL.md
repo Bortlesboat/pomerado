@@ -226,9 +226,9 @@ pomerado:section publication.declared-refusal:end -->
      before-and-after comparison that compares whole objects or serialized text, reads through
      another query after the commit than before it, or counts a field the site maintains as a
      change, a branch the session did not run that confirms through its own code (its own commit
-     call is fine), a throw after the final commit once the read-back found the written record,
-     and a stop before it on free text a save rewrote, are findings too, as is a coverage claim
-     that a check passed offline over a body that was not saved whole.
+     call is fine), a throw after a confirmed final commit once the read-back found the written
+     record, and a stop before it on free text a save rewrote, are findings too, as is a coverage
+     claim that a check passed offline over a body that was not saved whole.
 
 ## Never put these in published files
 

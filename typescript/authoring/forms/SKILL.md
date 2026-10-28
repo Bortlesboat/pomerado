@@ -248,7 +248,8 @@ request's 200. Match a confirmation message only against text
 the site showed for this submission, never wording you expect; when no such message was
 observed, read back the saved state (the record, its quantity or status) instead.
 
-Once that check or read-back matches the request, call the context's `verified()` with no
+Once that check confirms the submission, or the read-back finds the written record (writes
+skill), call the context's `verified()` with no
 argument just before returning, so the run reports the write as landed, whether it read the
 site's confirmation for this submission or the saved state. Without it the write stays a
 possible effect. Never call it for a status code without the page's error check (a 201

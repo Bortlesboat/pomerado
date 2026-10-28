@@ -1066,7 +1066,7 @@ it("has a write read back each saved caller value before its final commit, and s
     " ",
   );
   expect(writes).toContain(
-    "- On a form saved over several pages, before the final commit, read back what the site saved for the caller's values, from a summary, a review page or each saved page, in the session and in the composed script. Compare each value the site shows with `readBackMatches(shown, wanted)` from `pomerado/runtime`, against the option the tool picked when it picked one, or the site's version of a typed value it rewrote (above): `wanted` is that option's label or that version, and the caller's value otherwise. It accepts the same value in another format or word order, such as 1,50 for 1.5, and every number must be the caller's, the same numbers in the same order. When the site kept a different structured value, save that page again once with the same entries and read it back again, but only when saving it again updates the same record or page, never when the save adds an item, such as a cart line or a row. Prefer `saveAndReadBack` from `pomerado/runtime` for such a page's save, with the free-text fields in `freeText`: it does both and returns the values that still differ. When a structured value still differs, or a page whose save adds an item kept a different one, stop before the final commit's mark and throw `InputNotApplied` with its `field`, `requested` and `applied`. Prefer keeping a free-text value the site saved differently: later read-backs compare against it, and the output lists it in `saved_differences` (\"Check the read-back\").",
+    "- On a form saved over several pages, before the final commit, read back what the site saved for the caller's values, from a summary, a review page or each saved page, in the session and in the composed script. Compare each value the site shows with `readBackMatches(shown, wanted)` from `pomerado/runtime`, against the option the tool picked when it picked one, or the site's version of a typed value it rewrote (above): `wanted` is that option's label or that version, and the caller's value otherwise. It accepts the same value in another format or word order, such as 1,50 for 1.5, and every number must be the caller's, the same numbers in the same order. When the site kept a different structured value, save that page again once with the same entries and read it back again, but only when saving it again updates the same record or page, never when the save adds an item, such as a cart line or a row. Prefer `saveAndReadBack` from `pomerado/runtime` for such a page's save, with the free-text fields in `freeText`: it does both and returns the values that still differ. When a structured value still differs, or a page whose save adds an item kept a different structured value, stop before the final commit's mark and throw `InputNotApplied` with its `field`, `requested` and `applied`. Prefer keeping a free-text value the site saved differently: later read-backs compare against it, and the output lists it in `saved_differences` (\"Check the read-back\").",
   );
   expect(readBackMatches("California", "California")).toBe(true);
   expect(readBackMatches("California", "CA")).toBe(false);
@@ -1268,11 +1268,11 @@ it("renders the pinned standalone authoring", async () => {
     ["cec5bca01bf057a95faaab07e25c02e3d0b9329e66d6df97b6744f81ab421bf7", "auth"],
     ["ad5b4f8391094f6d7c8ff4a480b071bb298807da9523971e0aaf7d719f152664", "testing"],
     ["2b559ad88157f28be2a054787f4c736cf192bb825760bdf3050c01a59d060ba8", "pagination"],
-    ["c21b3e69771470e4ae72b6c88201a2b6fad8d3eea76f4ebfda47993aeb351448", "forms"],
-    ["db597c9b83b9c455595f4f286c835506efacf565dd090d302cd7c5e0de8d755e", "writes"],
+    ["4d05ffc26a395fafb591bb8ac593b79ae7450f21f26ac8709cbbe543fc2453df", "forms"],
+    ["16b1ab5848ab5150ad9031bfb539b454c865c648f65a5070e241918a9eb41a59", "writes"],
     ["d06f650fc09f74d3711e043da2303de97ced42c9ff2541d48ec28cd7e686519d", "cart"],
     ["14ec800f1f19a16e1a94c11e8a4e869e798bf597d86cd2369a51d32d66c9bc94", "caller-input"],
-    ["5a9375527a3285ebc142ea35d56ca46d2ddc657b2e3aa3f835ec13666ff2ff44", "publication"],
+    ["fb7cd6b0929612a94dd6e0a3c54fa42e102ada77ccd83059fe818a01d8307cf0", "publication"],
     ["e6a91d90cd515385aa8a7073a5435ac00a4f2dbaaa045cffd3b290e9b497dc91", "workspace/AGENTS.md"],
     ["9501ae9c273d5d4db8976a544879f7aee44212c8a616b00e74263dcd3c593035", "workspace/README.md"],
   ]);

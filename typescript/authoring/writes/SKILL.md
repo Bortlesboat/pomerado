@@ -187,18 +187,19 @@ During the session:
   updates the same record or page, never when the save adds an item, such as a cart line or a
   row. Prefer `saveAndReadBack` from `pomerado/runtime` for such a page's save, with the
   free-text fields in `freeText`: it does both and returns the values that still differ. When a
-  structured value still differs, or a page whose save adds an item kept a different one, stop
-  before the final commit's mark and throw `InputNotApplied` with its `field`, `requested` and
-  `applied`. Prefer keeping a free-text value the site saved differently: later read-backs
+  structured value still differs, or a page whose save adds an item kept a different structured
+  value, stop before the final commit's mark and throw `InputNotApplied` with its `field`,
+  `requested` and `applied`. Prefer keeping a free-text value the site saved differently: later read-backs
   compare against it, and the output lists it in `saved_differences` ("Check the read-back").<!-- pomerado:section writes.several-saves -->
 - When the write changes state that already exists, such as a saved record or a cart
   (.agents/cart/SKILL.md), read that state before the committing step and again after it,
-  in the session and in the composed script. A field the input sets that did not change as
-  asked goes in `saved_differences`, and any other difference follows "Check the read-back"
-  below: the script still calls `verified()` and reports the difference in its output. Read
-  both through the same query or view, selecting the same fields: two read paths, such as a
-  list's row and the record's own detail view, can return the same unchanged field in
-  different shapes, and a comparison across them then reports a change that never happened.
+  in the session and in the composed script. Once the commit is confirmed (below), a field the
+  input sets that did not change as asked goes in `saved_differences`, and any other
+  difference follows "Check the read-back" below: the script still calls `verified()` and
+  reports the difference in its output. Read both through the same query or view, selecting
+  the same fields: two read paths, such as a list's row and the record's own detail view, can
+  return the same unchanged field in different shapes, and a comparison across them then
+  reports a change that never happened.
 - If a step meets an option the input does not settle, stop that step before choosing
   it and ask, in one round for the whole page once every value the input and earlier answers supply on it is filled (forms skill). A `request_input` question during the session waits in place; a choice
   that exists only on the page mid-flow, such as a seat on the flight just chosen, is
@@ -430,9 +431,10 @@ The read-back, as the session's rules above describe it, compares what the site 
 the caller asked for, in the form the site saves it.
 
 A structured value has one exact reading: an option or record the tool picks, a yes or no, a
-number, date, time or amount, an email, a phone number, or a code or ID. Free text is words the
-caller typed into a text box that a site may respell or standardize, such as a name, an address,
-a city or a note.
+number, date, time or amount, an email, a phone number, or a reference code or ID the caller
+gives. Free text is words the caller typed into a text box that a site may respell or
+standardize, such as a name, an address or any part of it, its postal code included, a city or a
+note.
 
 - A reference, such as a person, an assignee, a linked record or a linked row, is often saved as
   the referenced record's ID while the page shows its label. Take the caller's label or ID as the
@@ -475,10 +477,10 @@ a city or a note.
   as `saveAndReadBack` returns it, with `shown` left out when the site shows none, and
   `saved_differences` left out when every value holds. A tool whose output already holds a
   fuller per-field list of what the site kept lists them there instead. A read-back that can't
-  find the record calls no `verified()`, so the run reports a possible change. When the script
-  confirms from the commit response, take the comparison's after read through the before
-  read's query in the same call, before `verified()`, so that `verified()` stays the last call
-  to the site.
+  find the record, or finds it only as it was before the write, calls no `verified()`, so the
+  run reports a possible change. When the script confirms from the commit response, take the
+  comparison's after read through the before read's query in the same call, before
+  `verified()`, so that `verified()` stays the last call to the site.
 - A write with branches, such as create when nothing matches and update when one does, runs
   one branch in the session. Each branch may make its own commit call, such as a create call
   and an update call; keep their confirmation and comparison in shared code that reads back
