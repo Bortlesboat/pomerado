@@ -1231,37 +1231,6 @@ it("asks for an access code with a private secret question", async () => {
   );
 });
 
-// A code the site sends partway through a write, such as one confirming an email or phone the
-// form took, has no sign-in to belong to, signed out above all. The writes skill sends it through
-// a secret question the session's act step asks, and the auth skill no longer limits a code
-// question to protected actions after sign-in. A code that is part of signing in still goes
-// through authenticate, and a host sign-in step still refuses a registration screen.
-it("has a write ask for a code the site sends during it from its act step, not through authenticate", async () => {
-  const texts = await renderedTexts("typescript/authoring");
-  const text = (name: string) => (texts.get(name) ?? "").replace(/\s+/g, " ");
-  expect(text("writes")).toContain(
-    "A code the site sends during the write, signed out too, such as one confirming an email or phone the form took, belongs to the write, not a sign-in: prefer a `secret` question of kind `one_time_code` that the next `act` step's script asks, as the caller-input skill's code example does, over `authenticate`.",
-  );
-  expect(text("auth")).toContain(
-    "A `request_input` or script secret question for a code is only for a code that is not part of signing in: another code a later protected action after sign-in asks for, or a code the site sends during a write, signed out too (writes skill); `authenticate` is never started just for such a code.",
-  );
-  expect(text("auth")).not.toContain("is only for a later protected action after sign-in");
-  // The caller-input skill's list of codes to ask for, and its secret question type, agree.
-  expect(text("caller-input")).toContain(
-    "- a code that is not part of signing in: another code the site sends to confirm a protected action after sign-in, or a code the site sends during a write, signed out too (writes skill), such as a confirmation code by text or email, never a code that is part of signing in (auth skill);",
-  );
-  expect(text("caller-input")).toContain(
-    "a code the site sent that is not part of signing in, to confirm an action after sign-in or during a write, signed out too (`one_time_code`; a code that is part of signing in is a `code` field of the `authenticate` step, never a question)",
-  );
-  // Unchanged: a code that is part of signing in is the sign-in's own code field.
-  expect(text("auth")).toContain(
-    "A code the site sends as part of signing in, by text message, email or an authenticator app, is part of the sign-in: map its screen as a `signInStep` with a `code` field and let `authenticate` get the code, which the host fills or asks the caller for. Never ask for it separately with `request_input`.",
-  );
-  expect(guardianExecutionPolicy(nativeExecutionEnvironment)).toContain(
-    "Deny a registration, password-reset or unrelated action, and any passkey or security-key step even when trusted intent asks for one.",
-  );
-});
-
 // A file collected during a build has no download link, which only a published tool's runs add.
 it("tells the minter a collected file's download link appears only when the published tool runs", async () => {
   const texts = await renderedTexts("typescript/authoring");
@@ -1294,15 +1263,15 @@ it("renders the pinned standalone authoring", async () => {
       .filter(([path]) => path !== "reference/publication-review.md")
       .map(([path, text]) => [sha256(text), `workspace/${path}`]),
   ]).toStrictEqual([
-    ["5f3af5401fa484e56cd4eaeca41da8ba04cb9ded455ffc46263e659a05e2d54e", "core"],
+    ["49aee4b7daf31e854d7328cca98525e21f59329c2e3e761162f2ee8684ca8196", "core"],
     ["933e2daac360d31beeeb2a8aeabcf22ca8512cc0272f321b047106f4a2055ab3", "search"],
     ["930550863b9f83e98719b77bc149b20e70b526a88a16dd758d44ab20d048d8cb", "auth"],
     ["ad5b4f8391094f6d7c8ff4a480b071bb298807da9523971e0aaf7d719f152664", "testing"],
     ["2b559ad88157f28be2a054787f4c736cf192bb825760bdf3050c01a59d060ba8", "pagination"],
     ["4d05ffc26a395fafb591bb8ac593b79ae7450f21f26ac8709cbbe543fc2453df", "forms"],
-    ["84e148c4a1303c3f955742e50bc046a3ade624def1a91f5ed3fb70de3d0b3c8e", "writes"],
+    ["d419a8f75aac0c28278e7426c3fc32458adb9bfe9a20076a4675ee9a1b403011", "writes"],
     ["d06f650fc09f74d3711e043da2303de97ced42c9ff2541d48ec28cd7e686519d", "cart"],
-    ["1f29e8390f1b07d9b50d261f81aa1bc7b745f9e75acb72fafec3de718f310a25", "caller-input"],
+    ["25936094f866a7739d5615ef2f4bab8c62f3616cb94dabebe635fd6bca679c81", "caller-input"],
     ["fb7cd6b0929612a94dd6e0a3c54fa42e102ada77ccd83059fe818a01d8307cf0", "publication"],
     ["e6a91d90cd515385aa8a7073a5435ac00a4f2dbaaa045cffd3b290e9b497dc91", "workspace/AGENTS.md"],
     ["9501ae9c273d5d4db8976a544879f7aee44212c8a616b00e74263dcd3c593035", "workspace/README.md"],

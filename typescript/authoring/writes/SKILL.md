@@ -208,7 +208,9 @@ During the session:
 - A code the site sends during the write, signed out too, such as one confirming an email or
   phone the form took, belongs to the write, not a sign-in: prefer a `secret` question of kind
   `one_time_code` that the next `act` step's script asks, as the caller-input skill's code
-  example does, over `authenticate`.
+  example does, over `authenticate`. A code screen that signs you in, such as one a checkout
+  opens to sign in and continue, is still `authenticate`, even partway through a write (auth
+  skill).
 
 ## The session
 

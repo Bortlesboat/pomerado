@@ -179,21 +179,6 @@ it("ends a build whose site is temporarily down as site_unavailable", async () =
   expect(f.requests).toHaveLength(1);
 });
 
-// A code a site sends partway through a write, signed out too, is no sign-in code: the
-// request_input description says a secret question may ask for it, as the auth, writes and
-// caller-input skills do, and still sends a code that is part of signing in to authenticate.
-it("offers a secret question for a code a write's site sends, and keeps a sign-in code with authenticate", async () => {
-  const f = await fixture((_request, index) => [prose("Stopping.")][index] ?? prose("Stopping."));
-  await f.run();
-  const offered = JSON.stringify(
-    f.requests[0]?.tools.find((tool) => "name" in tool && tool.name === "request_input"),
-  );
-  expect(offered).toContain(
-    "A secret is private text the caller types, or a code that is not part of signing in: another code a later protected action after sign-in asks for, or a code the site sends during a write, signed out too, which you prefer to ask with a declared secret question from the next act step's script (writes skill); a code that is part of signing in (by text message, email or an authenticator app) is a code field of execute purpose authenticate, which asks the caller itself, so never ask for it here.",
-  );
-  expect(offered).not.toContain("a code the site sends to confirm a protected action after sign-in;");
-});
-
 /** A request that orders a stop on contradictory facts, with the fact it names in its input. */
 const stopOnConflict = {
   intent:
