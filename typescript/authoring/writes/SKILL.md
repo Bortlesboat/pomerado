@@ -337,6 +337,16 @@ too. Run each step with `execute` purpose `act`, target `liveBrowser`.
   Prefer confirming the commit from its own response, and prefer closing such a dialog with its
   own control (core skill), or going to the address in the site's own link, before clicking
   anything behind it.
+- When one run repeats a commit for several items, such as adding items to a cart, prefer
+  confirming each item from its own commit response and reading the saved state once after the
+  last item, over reloading the page after every item. When a commit answers 429 or a bot
+  challenge, prefer stopping before the next commit and returning each item's outcome: added,
+  refused by the site, or not tried. An item is refused only when the site answered its own
+  commit request with 429 or a challenge, and not tried only when its commit step never entered;
+  a timeout or a missing answer is neither, so read that item back as above. An item its own
+  commit response confirmed stays added even when the block stops the last read. Never return a
+  refused or not-tried item as added, and call `verified()` only when at least one item was
+  added; when none was, throw `OperationFailure`, as for any block.
 - When a read-back is needed, the first one that matches confirms the write; stop there. It
   matches when it shows
   the written record after the write, found by something the write produced or entered (its

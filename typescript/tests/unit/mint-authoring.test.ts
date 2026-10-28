@@ -1016,6 +1016,39 @@ it("has a write confirm from its own commit request, and read back only when tha
 });
 
 /*
+ * A write that added a long list of items to a cart reloaded the cart page after every add. Partway
+ * through, the site's bot protection answered an add with 429, the reloaded cart never drew its
+ * total, and the run timed out with most items added and its outcome unknown. A per-item commit
+ * confirms from its own response and reads the saved state once, and a block ends the run with
+ * each item's outcome. A read that meets a block fails instead, so the host's recovery for a
+ * blocked read still sees it.
+ */
+it("has a repeated commit confirm per item and stop at a block, and a blocked read fail", async () => {
+  const texts = await renderedTexts("typescript/authoring");
+  const text = (name: string) => (texts.get(name) ?? "").replace(/\s+/g, " ");
+  expect(text("writes")).toContain(
+    "- When one run repeats a commit for several items, such as adding items to a cart, prefer confirming each item from its own commit response and reading the saved state once after the last item, over reloading the page after every item. When a commit answers 429 or a bot challenge, prefer stopping before the next commit and returning each item's outcome: added, refused by the site, or not tried.",
+  );
+  // A refused or untried item never settles as added, and neither is read from a timeout.
+  expect(text("writes")).toContain(
+    "or not tried. An item is refused only when the site answered its own commit request with 429 or a challenge, and not tried only when its commit step never entered; a timeout or a missing answer is neither, so read that item back as above. An item its own commit response confirmed stays added even when the block stops the last read. Never return a refused or not-tried item as added, and call `verified()` only when at least one item was added; when none was, throw `OperationFailure`, as for any block.",
+  );
+  // It follows the post-commit dialog bullet, beside the rest of the commit-response guidance.
+  expect(text("writes")).toContain(
+    "before clicking anything behind it. - When one run repeats a commit for several items,",
+  );
+  // A blocked read lets the call fail, so the host's recovery for it still runs.
+  expect(text("core")).toContain(
+    "- When the site answers 429 partway through a read, or `waitPastChallenge` throws there, prefer letting the call fail over retrying or looping inside the tool, or over returning the rows read so far: a host may give a blocked read another browser or one rerun, and only a failed call reaches it.",
+  );
+  expect(text("core")).toContain(
+    "and never wait out a timeout and swallow it to probe for a challenge. - When the site answers 429 partway through a read,",
+  );
+  // No fixed wait comes with it.
+  expect(text("core")).toContain("never add a fixed sleep");
+});
+
+/*
  * A write's own status and body checks for its commit response missed a case each time, such as
  * a 3xx it rejected or a success field holding an error word, and each fix opened another. The
  * writes skill and its reference confirm the final commit through the runtime's one check.
@@ -1263,13 +1296,13 @@ it("renders the pinned standalone authoring", async () => {
       .filter(([path]) => path !== "reference/publication-review.md")
       .map(([path, text]) => [sha256(text), `workspace/${path}`]),
   ]).toStrictEqual([
-    ["314001add5599865b36f5387db94084b575fe18046d1577c839a4b4bea356f4f", "core"],
+    ["d975881a8811cfd9e32553b332047f1279c764361eef027d07a6ea6ff518ee61", "core"],
     ["933e2daac360d31beeeb2a8aeabcf22ca8512cc0272f321b047106f4a2055ab3", "search"],
     ["cec5bca01bf057a95faaab07e25c02e3d0b9329e66d6df97b6744f81ab421bf7", "auth"],
     ["ad5b4f8391094f6d7c8ff4a480b071bb298807da9523971e0aaf7d719f152664", "testing"],
     ["2b559ad88157f28be2a054787f4c736cf192bb825760bdf3050c01a59d060ba8", "pagination"],
     ["c21b3e69771470e4ae72b6c88201a2b6fad8d3eea76f4ebfda47993aeb351448", "forms"],
-    ["19b1e31e9891c46a236e05d4637f81750d93e8826a5987e6ed624e97ad64598d", "writes"],
+    ["eab55c36adc52f820ebb5d96ccb1f0ab446e31877771a015582d4017ebc1cdfb", "writes"],
     ["b27e2f41a137ef6d981341a6d384f78899b1e53bdebbf9f64b3ff5209d275bd1", "cart"],
     ["c91deddad323e3c996cc3a172812a1cfd2e14eba76f0552264384708c7d13c58", "caller-input"],
     ["04e9f9dca786e3cf3f125a52d5bc73d71506387db521ad3ac53f8ca13dd5dd6e", "publication"],
