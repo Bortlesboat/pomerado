@@ -198,7 +198,10 @@ the file and puts it there, and never anywhere else. Return a download as a `Fil
 from `files.collect(trigger)`, where `trigger` makes the execute call that starts it; you
 see only its name, type, size and sha256. While the tool is being built, the file has no
 download_url or expires_at; the published tool's runs add them. Prefer returning the file as
-collected, and never require those fields in code. A downloaded file meant for the caller goes
+collected, and never require those fields in code. The host refuses a result whose `$file`
+differs from the file it collected: `download_url` and `expires_at` are the host's own link to
+the bytes. When the caller wants the site's own link or another fact about the file, prefer
+returning it in a separate field beside the file. A downloaded file meant for the caller goes
 through `files.collect`. Never write a handle in source, set file inputs, handle downloads
 yourself, route the page's requests or read a file's contents back (`.files` items,
 `FileReader`, `FormData`, a request body): the host refuses such source. An older tool that
