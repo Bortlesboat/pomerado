@@ -338,9 +338,9 @@ too. Run each step with `execute` purpose `act`, target `liveBrowser`.
   completed. A session in which any step recorded a confirmation is never
   `unverifiable`; publish against the confirming step.
 - After a commit, the site may open a dialog or cover the page, such as an added-to-cart panel.
-  Prefer confirming the commit from its own response, and before clicking anything behind such
-  a dialog, close it with its own control (core skill) or go to the address in the site's own
-  link.
+  Prefer confirming the commit from its own response, and prefer closing such a dialog with its
+  own control (core skill), or going to the address in the site's own link, before clicking
+  anything behind it.
 - When a read-back is needed, the first one that matches confirms the write; stop there. It
   matches when it shows the written record after the write, found by something the write
   produced or entered (its number, its own reference or the values entered). Compare every

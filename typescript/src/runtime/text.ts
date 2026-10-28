@@ -59,7 +59,8 @@ export const foldChoiceText = (text: unknown): string => {
  * decimal mark, whichever it is, and zeros after it drop, so 1,5 matches 1.5, 28,0 matches 28 and
  * 8,20 matches 8.2, while 1,5 never matches 15, 1,25 never matches 1.2 and 10.0 never matches 100.
  * Three digits after a lone mark may be thousands, so 1,250 and 1.250 stay as written and never
- * match 1.25. Compare dates and amounts with `readBackMatches`, which reads them as values.
+ * match 1.25, and a number right after a letter is a code, so v2.10 never matches v2.1. Compare
+ * dates and amounts with `readBackMatches`, which reads them as values.
  *
  * With `{ rewrite: true }`, `shown` is the site's own version of a value the tool typed, `wanted`,
  * such as an address the site standardized as it was entered, and the answer is whether it kept
@@ -95,8 +96,8 @@ export const sameText = (
 ): boolean => {
   // One period or comma between a number's digits is its decimal mark: the number reads with a
   // point and without the zeros after it, so 1,50 reads 1.5 and 28,0 reads 28. Three digits after
-  // a lone mark may be thousands, as in 1,250, so they stay as written. rankByWords reads numbers
-  // the same way.
+  // a lone mark may be thousands, as in 1,250, and a number right after a letter is a code, as in
+  // v2.10, so both stay as written. rankByWords reads numbers the same way.
   const decimal = (number: string, whole: string, fraction: string) => {
     if (fraction.length === 3) return number;
     const kept = fraction.replace(/0+$/u, "");
@@ -111,7 +112,7 @@ export const sameText = (
       .toLowerCase()
       .replace(/(?<!\p{N})['\u2018\u2019\u02bc](?!\p{N})/gu, "")
       .replace(/(?<!\p{N})[.,\-\u2010\u2011\u2012\u2013\u2014](?!\p{N})/gu, " ")
-      .replace(/(?<![\p{N}.,])(\p{N}+)[.,](\p{N}+)(?!\p{N}|[.,]\p{N})/gu, decimal)
+      .replace(/(?<![\p{L}\p{N}.,])(\p{N}+)[.,](\p{N}+)(?!\p{N}|[.,]\p{N})/gu, decimal)
       .replace(/\s+/gu, " ")
       .trim();
     return folded === "" ? raw.trim() : folded;
@@ -368,7 +369,7 @@ export const rankByWords = (query: string, texts: readonly string[]): number[] =
   };
   // One period or comma between a number's digits is its decimal mark, as sameText reads it:
   // the number reads with a point and without the zeros after it, and three digits after a lone
-  // mark stay as written.
+  // mark, or a number right after a letter, stay as written.
   const decimal = (number: string, whole: string, fraction: string) => {
     if (fraction.length === 3) return number;
     const kept = fraction.replace(/0+$/u, "");
@@ -388,8 +389,8 @@ export const rankByWords = (query: string, texts: readonly string[]): number[] =
       if (digits.length >= 7 && digits.length <= 15) return [digits];
     }
     const spaced = raw
-      .replace(/(?<![\p{L}\p{N}])(\d{1,3}(?:,\d{3})+)(?!\p{N})/gu, (number) => number.replace(/,/gu, ""))
-      .replace(/(?<![\p{N}.,])(\p{N}+)[.,](\p{N}+)(?!\p{N}|[.,]\p{N})/gu, decimal)
+      .replace(/(?<![\p{L}\p{N},])(\d{1,3}(?:,\d{3})+)(?!\p{N})/gu, (number) => number.replace(/,/gu, ""))
+      .replace(/(?<![\p{L}\p{N}.,])(\p{N}+)[.,](\p{N}+)(?!\p{N}|[.,]\p{N})/gu, decimal)
       .replace(/[$\u20AC\u00A3\u00A5\u20B9]/gu, " ");
     const words: string[] = [];
     for (const piece of spaced.split(" ")) {
