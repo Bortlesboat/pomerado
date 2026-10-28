@@ -120,7 +120,9 @@ say under `notTested` why it does not apply to this tool:
   category or by identifier: a search by the exact name or code of something the site lists
   publicly, such as a product, a place or a book's ISBN, finds that item;
 - many results with the next page, and a query with a single result;
-- a closed, sold-out or unavailable record, returned as such, never as available;
+- a closed, sold-out or unavailable record, returned as such, never as available, when the site
+  readily offers one that a quick search or browse finds. If none turns up reasonably, drop this case
+  and say why under `notTested`; never keep hunting for one, and never let its absence stop the build;
 - a boundary value: the earliest or latest date the site offers, or the lowest or highest count
   or price it takes;
 - a value other than the default for each control;
