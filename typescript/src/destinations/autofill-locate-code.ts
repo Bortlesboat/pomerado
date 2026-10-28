@@ -115,14 +115,18 @@ const controlShapeCode = String.raw`(element) => {
  * Page code: whether an address is a script that does nothing, the only script action a sign-in
  * form may have: `javascript:`, `javascript:;`, `javascript:void(0)` or `javascript:void 0`, with
  * or without a closing semicolon, read as the browser runs it (the address as parsed, its body
- * percent-decoded). The scheme may be in any case, and whitespace may stand only between the
- * body's words and signs, where script reads it as whitespace: one inside `void` could split it into
- * two statements, the second a call of the page's own function. `void` is lowercase, as script
- * reads it; `Void(0)` calls a function of the page's. Any other body runs what it says, so it is
- * judged as any action off the site; one that does not decode, too. The step call and the
- * submission guard both judge by it.
+ * percent-decoded). As a form's own action (`formAction`), the React toolkit's placeholder on a
+ * form whose submit its own code handles counts too: `javascript:throw new Error('React form
+ * unexpectedly submitted.')`, in single or double quotes, which only throws. A link's address never
+ * counts it. The scheme may be in any case, and whitespace may stand only between the body's words
+ * and signs, where script reads it as whitespace: one inside `void` could split it into two
+ * statements, the second a call of the page's own function, and a line break after `throw` is no
+ * script at all. The words are in the case script reads them; `Void(0)` calls a function of the
+ * page's. Any other body runs what it says, so it is judged as any action off the site; so is any
+ * other message, and a body that does not decode. The step call and the submission guard both judge
+ * by it.
  */
-export const noOpScriptCode = String.raw`(address) => {
+export const noOpScriptCode = String.raw`(address, formAction = false) => {
   let url;
   try {
     url = new URL(address);
@@ -136,7 +140,11 @@ export const noOpScriptCode = String.raw`(address) => {
   } catch {
     return false;
   }
-  return /^\s*(?:void\s*\(\s*0\s*\)|void\s+0)?\s*;?\s*$/.test(body);
+  return (
+    /^\s*(?:void\s*\(\s*0\s*\)|void\s+0)?\s*;?\s*$/.test(body) ||
+    (formAction === true &&
+      /^\s*throw[^\S\n\r\u2028\u2029]+new\s+Error\s*\(\s*(["'])React form unexpectedly submitted\.\1\s*\)\s*;?\s*$/.test(body))
+  );
 }`;
 
 /**
@@ -157,7 +165,7 @@ const controlReadCode = `(element) => {
   const actions = associated ? [formProperty("action")] : [];
   const methods = associated ? [formProperty("method")] : [];
   // Whether the form's own action is a script that does nothing, which sends nothing by itself.
-  const scriptAction = associated !== null && (${noOpScriptCode})(actions[0]);
+  const scriptAction = associated !== null && (${noOpScriptCode})(actions[0], true);
   // Whether the form or a control in it says GET itself: a bare form reads as GET too, but a
   // page that submits it with code sends nothing in an address.
   let explicitGet = associated ? (associated.getAttribute("method") ?? "").trim().toLowerCase() === "get" : false;
