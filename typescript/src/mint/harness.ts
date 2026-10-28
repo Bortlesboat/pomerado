@@ -67,7 +67,10 @@ import {
   cutToLimit,
   publicationRefusalUnfixable,
   type PublicationFinding,
+  type ResponseRuling,
+  hostRecordedEvidencePath,
 } from "../guardian/review-contracts.js";
+import { publicationFindingId } from "../guardian/publication.js";
 import {
   taskUpdateForReview,
   type PendingTaskUpdate,
@@ -547,6 +550,12 @@ const refusalRecovery = (reason: string | undefined, write: boolean): Publicatio
         !(write && reason === "input_contract_changed")
       ? "new_observation"
       : "correct_source";
+/**
+ * How the minter answers a finding it holds wrong instead of resubmitting unchanged, added to a
+ * Guardian denial's instruction.
+ */
+const findingAnswerInstruction =
+  " When you hold a finding wrong, or no longer applying, under the review's rules, answer it instead of resubmitting unchanged: call finish_build again with findingResponses naming its id, a short response and the evidence that shows it, a live test caseId or a capture the host recorded, never a file you wrote. Guardian rules on each answer in the next review. An answer never stands in for a live run or capture a finding asks for.";
 /** A refusal the harness makes before publication runs, as its decision. */
 const hostRefusalDecision = (
   reason: string,
@@ -1724,25 +1733,40 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
         Effect.forEach(findings, (finding) =>
           screenRationale(finding.explanation).pipe(
             Effect.map((explanation) => ({
+              // Taken from the finding as Guardian returned it, so the next review knows it.
+              id: publicationFindingId(finding),
               ...finding,
               file: workspacePath(finding.path),
               explanation,
             })),
           ),
         );
+      /** Guardian's rulings on the minter's answers, each reason screened like its rationale. */
+      const minterRulings = (rulings: readonly ResponseRuling[]) =>
+        Effect.forEach(rulings, (ruling) =>
+          screenRationale(ruling.reason).pipe(Effect.map((reason) => ({ ...ruling, reason }))),
+        );
       const minterReview = <
         Review extends {
           readonly rationale: string;
           readonly findings?: readonly PublicationFinding[] | undefined;
+          readonly responseRulings?: readonly ResponseRuling[] | undefined;
         },
       >(
         review: Review,
       ) =>
         Effect.gen(function* () {
           const rationale = yield* screenRationale(review.rationale);
-          return review.findings === undefined
-            ? { ...review, rationale }
-            : { ...review, rationale, findings: yield* minterFindings(review.findings) };
+          return {
+            ...review,
+            rationale,
+            ...(review.findings === undefined
+              ? {}
+              : { findings: yield* minterFindings(review.findings) }),
+            ...(review.responseRulings === undefined
+              ? {}
+              : { responseRulings: yield* minterRulings(review.responseRulings) }),
+          };
         });
       const screenAssumptions = (proposedAssumptions: PublicationRequest["assumptions"] = []) =>
         Effect.gen(function* () {
@@ -5103,6 +5127,11 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
        * evidence the host holds. The same again is refused before a second review. Kept in memory
        * only, so a takeover drops it.
        */
+      /**
+       * The ids of the findings of Guardian's latest publication denial, the ones the minter may
+       * answer in its next finish_build (`PublicationRequest.findingResponses`).
+       */
+      let answerableFindings: ReadonlySet<string> = new Set();
       let deniedSubmission:
         | {
             readonly paths: readonly string[];
@@ -5765,6 +5794,50 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                   executionContext: yield* executionContext(),
                 });
               }
+              // An answer names a finding of the latest denial, once: anything else has nothing
+              // for the next review to rule on, so it is refused before that review.
+              const answeredIds = (proposed.findingResponses ?? []).map(({ finding }) => finding);
+              const unanswerable = answeredIds.filter(
+                (id, index) => !answerableFindings.has(id) || answeredIds.indexOf(id) !== index,
+              );
+              if (unanswerable.length > 0) {
+                const reason = "finding_responses_unknown";
+                pendingDecision = hostRefusalDecision(reason, evidence.executionId, write);
+                yield* diagnose({ phase: "publication", code: "PublicationUnavailable", reason });
+                return JSON.stringify({
+                  status: "not_published",
+                  code: "PublicationUnavailable",
+                  reason,
+                  unanswerable: [...new Set(unanswerable)],
+                  answerable: [...answerableFindings],
+                  userInputRequired: false,
+                  instruction:
+                    "Not published and not reviewed: each findingResponses entry must name, once, the id of a finding in Guardian's latest publication denial; answerable lists them. Remove or correct the others and call finish_build again.",
+                  executionContext: yield* executionContext(),
+                });
+              }
+              // Only the host's own record shows a finding wrong: a file the minter wrote is no
+              // evidence, so an answer citing one is refused before review.
+              const unrecorded = (proposed.findingResponses ?? []).flatMap(({ evidence }) =>
+                evidence?.path === undefined || hostRecordedEvidencePath(evidence.path)
+                  ? []
+                  : [evidence.path],
+              );
+              if (unrecorded.length > 0) {
+                const reason = "finding_evidence_unrecorded";
+                pendingDecision = hostRefusalDecision(reason, evidence.executionId, write);
+                yield* diagnose({ phase: "publication", code: "PublicationUnavailable", reason });
+                return JSON.stringify({
+                  status: "not_published",
+                  code: "PublicationUnavailable",
+                  reason,
+                  unrecorded: [...new Set(unrecorded)],
+                  userInputRequired: false,
+                  instruction:
+                    "Not published and not reviewed: a findingResponses evidence path must name a capture the host recorded, under captures/, or publication/tests.json, never a file you wrote. Cite a live test caseId or such a capture, or leave the evidence out, and call finish_build again.",
+                  executionContext: yield* executionContext(),
+                });
+              }
               // Guardian denied this same submission, and a second review would deny it again.
               if (yield* unchangedSinceDenial(proposed)) {
                 const reason = "unchanged_since_denial";
@@ -5792,6 +5865,30 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                       ...proposed.httpVersion,
                       note: yield* screenMintText(dependencies, proposed.httpVersion.note),
                     };
+              const findingResponses =
+                proposed.findingResponses === undefined
+                  ? undefined
+                  : yield* Effect.forEach(proposed.findingResponses, (answer) =>
+                      Effect.gen(function* () {
+                        const response = yield* screenMintText(dependencies, answer.response);
+                        const path =
+                          answer.evidence?.path === undefined
+                            ? undefined
+                            : yield* screenMintText(dependencies, answer.evidence.path);
+                        return {
+                          ...answer,
+                          response,
+                          ...(answer.evidence === undefined
+                            ? {}
+                            : {
+                                evidence: {
+                                  ...answer.evidence,
+                                  ...(path === undefined ? {} : { path }),
+                                },
+                              }),
+                        };
+                      }),
+                    );
               const outputOverrides =
                 proposed.outputOverrides === undefined
                   ? undefined
@@ -5876,6 +5973,7 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                     ...(readBackUnavailable === undefined ? {} : { readBackUnavailable }),
                     ...(httpVersion === undefined ? {} : { httpVersion }),
                     ...(outputOverrides === undefined ? {} : { outputOverrides }),
+                    ...(findingResponses === undefined ? {} : { findingResponses }),
                   },
                   evidence,
                   ...(liveTests === undefined
@@ -5986,6 +6084,7 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                   ]),
                 ];
                 deniedSubmission = yield* submissionSnapshot(proposed, paths);
+                answerableFindings = new Set((denial?.findings ?? []).map(publicationFindingId));
               }
               // Guardian's public reason reaches the caller screened like the caller's other
               // text: credentials and host-private values out, cut to its bound. A screen that
@@ -6511,9 +6610,11 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                     repeatableRead,
                   },
                   (error.code === "ReviewDenied" && error.review?.reason === "evidence"
-                    ? "Not published yet: Guardian needs more evidence to judge this publication, and the rationale names each missing item. Gather each one within your authority, such as running the live tests or cases it names so their results reach the test record, or exploring the site's own controls for a capture it names, and fix every finding, then call finish_build again. A retired failure in publication/tests.json clears only by a way its clearedBy lists: running the same cases again on the same source clears none. Missing evidence is not a refusal and never a reason for a policy block. The existing example and result remain recorded."
+                    ? "Not published yet: Guardian needs more evidence to judge this publication, and the rationale names each missing item. Gather each one within your authority, such as running the live tests or cases it names so their results reach the test record, or exploring the site's own controls for a capture it names, and fix every finding, then call finish_build again. A retired failure in publication/tests.json clears only by a way its clearedBy lists: running the same cases again on the same source clears none. Missing evidence is not a refusal and never a reason for a policy block. The existing example and result remain recorded." +
+                      findingAnswerInstruction
                     : error.code === "ReviewDenied" && error.review !== undefined
-                      ? "Not published: Guardian blocked this publication. Each finding's explanation says what is wrong, the evidence and the fix, at its file and byte range. Fix every finding and each missing item the rationale names, then call finish_build again with the same executionId. The existing example and result remain recorded."
+                      ? "Not published: Guardian blocked this publication. Each finding's explanation says what is wrong, the evidence and the fix, at its file and byte range. Fix every finding and each missing item the rationale names, then call finish_build again with the same executionId. The existing example and result remain recorded." +
+                        findingAnswerInstruction
                       : "Not published. The existing example and result remain recorded. Source edits and another finish_build publication review may continue; this does not guarantee the failure is repairable.") +
                     " A fresh reviewed example read requires an available live host and host repeatableRead:true within the same input/account after confirmed executor cleanup. Otherwise never repeat the example or a write step that may have committed.",
                 );

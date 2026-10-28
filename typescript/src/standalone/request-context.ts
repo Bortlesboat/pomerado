@@ -441,6 +441,9 @@ export const requestContext = (session: StandaloneSession, request: PomeradoRequ
               publication.evidence,
               publication.references === undefined ? {} : { references: publication.references },
             ),
+            ...(publication.findingResponses === undefined
+              ? {}
+              : { findingResponses: publication.findingResponses }),
           },
           readSource,
           inline,

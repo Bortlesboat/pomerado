@@ -85,6 +85,11 @@ export const guardianReviewInput = (
     ...(turn.sources?.publicationDelta === undefined
       ? {}
       : { publication_delta: turn.sources.publicationDelta }),
+    // The minter's answers to that round's findings: untrusted call data, which this round rules on.
+    ...(turn.sources?.publicationDelta === undefined ||
+    (turn.pending.findingResponses?.length ?? 0) === 0
+      ? {}
+      : { untrusted_finding_responses: turn.pending.findingResponses }),
     ...(turn.pending.questionCandidate === undefined
       ? {}
       : {

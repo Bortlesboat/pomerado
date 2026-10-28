@@ -280,7 +280,7 @@ export const reviewDenied = (
   reviewId: string,
   decision: Pick<
     GuardianDecision,
-    "rationale" | "reason" | "findings" | "publicReason" | "refusal"
+    "rationale" | "reason" | "findings" | "responseRulings" | "publicReason" | "refusal"
   > & {
     readonly outcome: "deny" | "escalate";
   },
@@ -293,6 +293,9 @@ export const reviewDenied = (
       rationale: decision.rationale,
       reviewId,
       ...(decision.findings === undefined ? {} : { findings: decision.findings }),
+      ...(decision.responseRulings === undefined
+        ? {}
+        : { responseRulings: decision.responseRulings }),
       ...(decision.publicReason === undefined ? {} : { publicReason: decision.publicReason }),
       ...(decision.refusal === undefined ? {} : { refusal: decision.refusal }),
     },

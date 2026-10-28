@@ -74,7 +74,7 @@ const reviewFields: Record<ReviewKind, readonly string[]> = {
   recovery: ["advice"],
   question: [],
   update: [],
-  publication: ["reason", "findings", "publicReason"],
+  publication: ["reason", "findings", "publicReason", "responseRulings"],
   host: ["label"],
 };
 
@@ -111,6 +111,26 @@ export const guardianDecisionFormat: AgentOutputType = {
       },
       // An execution or recovery allow's optional note for the agent, which never blocks the step.
       advice: { anyOf: [{ type: "null" }, { type: "string" }] },
+      // A publication review's ruling on each minter answer to a prior finding the request carries.
+      responseRulings: {
+        anyOf: [
+          { type: "null" },
+          {
+            type: "array",
+            maxItems: 64,
+            items: {
+              type: "object",
+              properties: {
+                finding: { type: "string" },
+                ruling: { type: "string", enum: ["accepted", "rejected"] },
+                reason: { type: "string" },
+              },
+              required: ["finding", "ruling", "reason"],
+              additionalProperties: false,
+            },
+          },
+        ],
+      },
       findings: {
         anyOf: [
           { type: "null" },
@@ -159,6 +179,7 @@ export const guardianDecisionFormat: AgentOutputType = {
       "rationale",
       "reason",
       "findings",
+      "responseRulings",
       "publicReason",
       "label",
       "action",
