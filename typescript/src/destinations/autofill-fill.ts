@@ -117,12 +117,15 @@ const Changed = Schema.Struct({
 /**
  * A call the host refused, with the primary page then. `left`: a submit call of a step with a
  * submit found a field gone from the document the host typed in, which a new document may yet
- * replace (`screenGone`).
+ * replace (`screenGone`). `closed`: that call was a code step's (`codeOnly`), and found its submit
+ * or a field gone from that very document, as a code screen that sends itself on its last digit
+ * and closes in place does (`closedInPlace`).
  */
 type Stop = {
   readonly refusal: AutofillRefusal;
   readonly url?: string | undefined;
   readonly left?: true;
+  readonly closed?: true;
 };
 /** A fill call's answer once the host judged it: a refusal, or the call's own answer. */
 type CallAnswer = Exclude<FillAnswer, typeof LocatedError.Type> | Stop;
@@ -321,7 +324,10 @@ const stopped = (
   }
   if (!progress.typed) return answer.refusal;
   if (during === "submit")
-    return filledReport(step, progress, "refused", answer.url ?? "", answer.refusal);
+    return {
+      ...filledReport(step, progress, "refused", answer.url ?? "", answer.refusal),
+      ...(answer.closed === true ? { closedInPlace: true as const } : {}),
+    };
   progress.statuses.push("failed");
   return filledReport(step, progress, "not_attempted", answer.url ?? "", answer.refusal);
 };
@@ -420,6 +426,15 @@ const rejudge = (
 };
 
 /**
+ * A step the host submits whose every field takes a one-time code: a code screen with a submit or
+ * a submit key, never one that also takes a password or an identifier.
+ */
+const codeOnly = (step: AutofillStep<FillSlot>) =>
+  hostSubmits(step) &&
+  step.fields.length > 0 &&
+  step.fields.every((field) => field.slot === "code");
+
+/**
  * A submit call that found the screen gone once every field was typed: `sent` when the page took
  * it away itself. On a step with no submit, a field gone or its popup closed, as a code widget does
  * when it sends what its last box completed. On a step with a submit or a submit key, only a field
@@ -429,20 +444,28 @@ const rejudge = (
  * the sign-in's next check decides what the page sent. A field gone from that same document is
  * `left`: a form that takes its fields away or puts a new path in the address with pushState
  * loaded no new document, so it stays a refusal unless one loads within the host's wait.
+ * On a code step (`codeOnly`), a field or its submit gone from the very document the host typed
+ * in, known to be the same, is `closed`, which the host waits on as on `left`: a code screen that
+ * sends itself on its last digit may take its submit away and close in place, which no new
+ * document proves, so only the sign-in's own check can tell whether it sent the code
+ * (`closedInPlace`). Its submit gone while a new document holds its fields is no such screen.
  */
 const screenGone = (
   step: AutofillStep<FillSlot>,
   answer: typeof LocatedError.Type,
   typedIn: number | undefined,
-): "sent" | "left" | undefined => {
+): "sent" | "left" | "closed" | undefined => {
   if (step.fields.length === 0) return undefined;
   const fieldGone = answer.error === "not_found" && typeof answer.target === "number";
   if (!hostSubmits(step))
     return fieldGone || answer.error === "popup_missing" ? "sent" : undefined;
-  if (!fieldGone) return undefined;
-  return typedIn !== undefined && answer.document !== undefined && answer.document !== typedIn
-    ? "sent"
-    : "left";
+  const code = codeOnly(step);
+  const submitGone = code && answer.error === "not_found" && answer.target === "submit";
+  if (!fieldGone && !submitGone) return undefined;
+  const known = typedIn !== undefined && answer.document !== undefined;
+  if (known && answer.document !== typedIn) return fieldGone ? "sent" : undefined;
+  if (known && code) return "closed";
+  return fieldGone ? "left" : undefined;
 };
 
 /**
@@ -484,7 +507,8 @@ const fillCall =
               : {
                   refusal: locatedRefusal(answer, evidenceOrigins(input, progress)),
                   url: answer.url,
-                  ...(gone === "left" ? { left: true as const } : {}),
+                  ...(gone === "left" || gone === "closed" ? { left: true as const } : {}),
+                  ...(gone === "closed" ? { closed: true as const } : {}),
                 },
           );
         }
@@ -545,15 +569,27 @@ const codeSentBySite = (step: AutofillStep<FillSlot>) =>
   hostSubmits(step) && step.fields.some((field) => field.slot === "code");
 
 /**
+ * A first answer that found the screen closed in place (`closed`), once a look found the screen
+ * back: it stands as a refusal of its own, no longer closed.
+ */
+const screenBack = (first: Either.Either<CallAnswer, Error>) => {
+  if (Either.isLeft(first) || !("closed" in first.right)) return first;
+  const { closed: _closed, ...stop } = first.right;
+  return Either.right<CallAnswer>(stop);
+};
+
+/**
  * After a submit call of a step with a submit found its fields gone from the document the host
- * typed in (`left`, a refusal): looks again for up to `sendMs`, the step's settle wait at most
- * `pageSendMs`, in case a new document replaces it, as a form that hides itself while it sends what
- * was typed, then loads the site's answer, does; so after a code step's answer that may have raced
- * such a load (`codeSentBySite`, `first`). Each look only reads the page and never clicks, so a
- * look that fails, as one does while the page navigates, is a look lost. A look that finds the page
- * sent what was typed reports that (`page`). A look that finds the fields back leaves the first
- * answer standing, and so does the end of the wait. After a submit call's first answer but `left`,
- * a box that still fails its check is the screen that answer found, so the host looks again.
+ * typed in (`left`, a refusal), or a code step's submit gone from it (`closed`, also `left`): looks
+ * again for up to `sendMs`, the step's settle wait at most `pageSendMs`, in case a new document
+ * replaces it, as a form that hides itself while it sends what was typed, then loads the site's
+ * answer, does; so after a code step's answer that may have raced such a load (`codeSentBySite`,
+ * `first`). Each look only reads the page and never clicks, so a look that fails, as one does while
+ * the page navigates, is a look lost. A look that finds the page sent what was typed reports that
+ * (`page`). A look that finds the fields back leaves the first answer standing, no longer closed in
+ * place (`screenBack`), and the end of the wait leaves it as it was. After a submit call's first
+ * answer but `left`, a box that still fails its check is the screen that answer found, so the host
+ * looks again.
  */
 const awaitNewDocument = (
   input: CallInput,
@@ -573,7 +609,7 @@ const awaitNewDocument = (
       const answered = yield* fillCall(input, progress, changes)(look);
       if (pageSent(answered)) return answered;
       if (Either.isRight(answered) && !leftOnly(answered) && !(raced && unchecked(answered)))
-        return first;
+        return screenBack(first);
     }
     return first;
   });
@@ -824,7 +860,10 @@ const afterFieldCall = (
  * its submit call finds a box empty or fails, or the last box's typing loses its answer, as when
  * its page sends the code itself on the last digit and loads a new document while the host checks
  * the boxes (`codeSentBySite`). Its fields gone with a new document within `pageSendMs` is `page`,
- * with every box filled; else the report is as it would have been.
+ * with every box filled; else the report is as it would have been. A step whose every field takes
+ * a code, whose submit call finds its submit or a field gone from the very document the host typed
+ * in, gets the same looks, and when no new document comes is `refused` with `closedInPlace`: it may
+ * have sent the code itself and closed in place, which only the sign-in's own check can tell.
  * Guardian's refusals still come first: a control that moved off the site or changed how it
  * submits refuses the submit as before.
  * A step that names `dismiss` clicks that covering notice's own control first, when the page shows

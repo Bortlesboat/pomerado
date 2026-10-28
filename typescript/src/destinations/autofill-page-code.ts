@@ -1037,7 +1037,7 @@ const foundSubmit =
   (submitKey !== null && foundFields.length > 0) || submitSelector === null ? null : await locate(submitSelector);
 if (foundSubmit !== null && "error" in foundSubmit) {
   await checkReads(foundFields);
-  return { ...foundSubmit, target: "submit", url: primary.url() };
+  return { ...foundSubmit, target: "submit", url: primary.url()${fill?.call.kind === "submit" ? ", document: await documentStart()" : ""} };
 }
 const readFound = await readControls(foundSubmit === null ? foundFields : [...foundFields, foundSubmit]);
 const fields = readFound.slice(0, foundFields.length);
