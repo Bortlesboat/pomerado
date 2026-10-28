@@ -645,7 +645,12 @@ site's own data request<!-- pomerado:section core.data-request-reference -->, to
 each record's detail page, keep each to a few calls (open, wait, one read), and consider whether
 the request is better served as two tools, a search and a details read by identifier; say so in
 `coverage`. Prefer opening those detail pages only for the rows the call returns, after
-`readList`, not inside the list reader (pagination skill).
+`readList`, not inside the list reader (pagination skill). When a call needs many independent
+lookups or detail reads, such as one for each returned row, prefer running them in parallel
+batches over one after another, such as the site's own data request for each row sent together
+in one `evaluate`. Send no more at once than the build showed the site handling without refusing
+or challenging, and fewer, spaced out, where it refused or challenged; a block at run time still
+fails the call, as the 429 rule above says.
 Prefer the page's own structured data, its embedded JSON or the data response it renders from,
 to its rendered cards when it holds the same fields for the same records, and check on the
 example that it matches what the page shows. Embedded JSON holds the page as first rendered:
