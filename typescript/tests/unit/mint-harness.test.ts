@@ -2702,30 +2702,43 @@ it("tells the agent to ask a rejected read-or-write question again, never to wit
   ]);
 });
 
-it("keeps the reword-or-withdraw instruction for a rejected question other than read-or-write", async () => {
-  const responses: unknown[] = [];
+// A reword came back as "reword the question, or withdraw it", and builders dropped questions the
+// owner needed to answer. Guardian's label now says whether a question is still needed.
+it("tells the minter to ask a reworded question again unless Guardian found none needed", async () => {
+  const responses: Record<string, unknown>[] = [];
+  const labels = ["unclear", "repeat", undefined] as const;
+  let reviews = 0;
   const f = await fixture(
     (turn) =>
       Effect.gen(function* () {
-        responses.push(
-          JSON.parse(yield* turn.actions.requestInput(textQuestion("Which account type?"))),
-        );
+        for (const _label of labels)
+          responses.push(
+            JSON.parse(yield* turn.actions.requestInput(textQuestion("Which account type?"))),
+          );
       }),
     {
       reviewQuestion: () =>
-        Effect.succeed({ outcome: "reword" as const, rationale: "The site shows the types." }),
+        Effect.sync(() => {
+          const label = labels[reviews++];
+          return {
+            outcome: "reword" as const,
+            rationale: "Synthetic rationale.",
+            ...(label === undefined ? {} : { label }),
+          };
+        }),
     },
   );
   await f.run();
-  expect(responses).toEqual([
-    {
-      status: "question_rejected",
-      rationale: "The site shows the types.",
-      userInputRequired: false,
-      instruction:
-        "Reword the question using the rationale, or withdraw it and continue. Do not ask again for a value you were already given or that the site shows. A reworded question is reviewed again.",
-    },
+  expect(responses.map((response) => response["status"])).toEqual([
+    "question_rejected",
+    "question_rejected",
+    "question_rejected",
   ]);
+  // A question that needs other words is asked again; one Guardian found unneeded is not.
+  expect(responses[0]).toMatchObject({ questionNeeded: true });
+  expect(responses[1]).toMatchObject({ questionNeeded: false });
+  // An older reviewer gives no label, so the rationale alone says which.
+  expect(responses[2]).not.toHaveProperty("questionNeeded");
 });
 
 // The question review didn't know a build was a write build, so it rejected the true statement
