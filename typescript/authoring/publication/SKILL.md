@@ -163,9 +163,10 @@ first:
   you; the script never takes the first, the alphabetically first or a hard-wired value.
 - **Login URL.** A signed-in tool publishes the `loginUrl` you signed in from, and every run opens
   it. Check it is the site's own sign-in link as you clicked it (auth skill): no `state`, `nonce`,
-  `code_challenge`, `code`, `session_state` or signed token in its query or fragment, and no
-  identity provider's authorize endpoint. If it is not, follow that link again, call
-  `authenticate` again with it as `loginUrl`, then call `finish_build` with the same `executionId`.<!-- pomerado:section publication.http -->
+  `code_challenge`, `code`, `session_state`, signed token, or device or session identifier such as
+  a `did`, `device_id` or session id in its query or fragment, and no identity provider's
+  authorize endpoint. If it is not, follow that link again, call `authenticate` again with it as
+  `loginUrl`, then call `finish_build` with the same `executionId`.<!-- pomerado:section publication.http -->
 - **Page traffic.** Let the site's own scripts, fonts, images and analytics load. Guardian never
   refuses them for the username or keys they carry, so never block, route around or suppress
   them to satisfy review. Your code, page code it runs included, must never send the caller's

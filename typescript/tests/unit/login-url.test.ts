@@ -60,6 +60,23 @@ it.each([
     url: "https://id.example.com/realms/members/protocol/openid-connect/auth?client_id=portal",
     names: ["/realms/members/protocol/openid-connect/auth"],
   },
+  // A device or session identifier the site put in the link for the browser that read it.
+  {
+    url: "https://shop.example/login?x-shop-did=3f2b8c1e-9a4d-4e7b-b6c2-5d1f0a9e8b7c&state=af0ifjsldkj81d2c9b7e",
+    names: ["state", "x-shop-did"],
+  },
+  {
+    url: "https://shop.example/login?lang=en&device_id=3F2B8C1E-9A4D-4E7B-B6C2-5D1F0A9E8B7C",
+    names: ["device_id"],
+  },
+  { url: "https://shop.example/login?deviceId=d41d8cd98f00b204e980", names: ["deviceId"] },
+  { url: "https://shop.example/login?sid=Zx81kQp02LmVt7rWs9Ya", names: ["sid"] },
+  { url: "https://shop.example/login#SessionId=a8F3kL0pQ9zX2vB7nM4t", names: ["SessionId"] },
+  {
+    url: "https://shop.example/signin?JSESSIONID=1A2B3C4D5E6F7A8B9C0D",
+    names: ["JSESSIONID"],
+  },
+  { url: "https://shop.example/login?session.id=9b1deb4d3b7d4bad9bdd2b0d", names: ["session.id"] },
 ])("names the one-time parameters of $url", ({ url, names }) => {
   expect(oneTimeLoginUrlParameters(url)).toEqual(names);
 });
@@ -78,6 +95,13 @@ it.each([
   // Hash routes without one-time parameters.
   "https://member.example.com/#/dashboard?lang=en",
   "https://member.example.com/#/oauth/callback",
+  // A readable device or session value is a site setting, not one browser's identifier.
+  "https://shop.example/login?sid=en",
+  "https://shop.example/login?did=yes",
+  "https://shop.example/login?session_id=guest-checkout-flow",
+  // Parameters that only end in similar letters, and stable public identifiers.
+  "https://shop.example/login?client_id=3f2b8c1e-9a4d-4e7b-b6c2-5d1f0a9e8b7c&lang=en",
+  "https://shop.example/login?paid=3f2b8c1e-9a4d-4e7b-b6c2-5d1f0a9e8b7c",
   "not a url",
 ])("finds nothing one-time in %s", (url) => {
   expect(oneTimeLoginUrlParameters(url)).toEqual([]);
