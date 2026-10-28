@@ -266,9 +266,10 @@ A `not_published` result says why in `reason` and, for most reasons, what to do 
 Each finding also has an `id`. When you hold a finding wrong, or no longer applying, under the
 review's rules, answer it rather than resubmitting unchanged: call `finish_build` again with
 `findingResponses`, one entry per finding you answer, each with its `id`, a short `response` and
-`evidence` that shows it, a live test `caseId` or a file the review reads, such as a capture.
-Guardian rules on each answer in the next review, and a denial returns its `responseRulings`. An
-answer never replaces a live run or capture a finding asks for: run it instead.
+`evidence` that shows it, a live test `caseId` or a capture the host recorded under
+`captures/`, never a file you wrote. Guardian rules on each answer in the next review, and a
+denial returns its `responseRulings`. An answer never replaces a live run or capture a finding
+asks for: run it instead.
 
 Any other reason: read `diagnostic` and the instruction; the existing example stays recorded.
 

@@ -68,6 +68,7 @@ import {
   publicationRefusalUnfixable,
   type PublicationFinding,
   type ResponseRuling,
+  hostRecordedEvidencePath,
 } from "../guardian/review-contracts.js";
 import { publicationFindingId } from "../guardian/publication.js";
 import {
@@ -554,7 +555,7 @@ const refusalRecovery = (reason: string | undefined, write: boolean): Publicatio
  * Guardian denial's instruction.
  */
 const findingAnswerInstruction =
-  " When you hold a finding wrong, or no longer applying, under the review's rules, answer it instead of resubmitting unchanged: call finish_build again with findingResponses naming its id, a short response and the evidence that shows it, a live test caseId or a file the review reads, such as a capture. Guardian rules on each answer in the next review. An answer never stands in for a live run or capture a finding asks for.";
+  " When you hold a finding wrong, or no longer applying, under the review's rules, answer it instead of resubmitting unchanged: call finish_build again with findingResponses naming its id, a short response and the evidence that shows it, a live test caseId or a capture the host recorded, never a file you wrote. Guardian rules on each answer in the next review. An answer never stands in for a live run or capture a finding asks for.";
 /** A refusal the harness makes before publication runs, as its decision. */
 const hostRefusalDecision = (
   reason: string,
@@ -5812,6 +5813,28 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                   userInputRequired: false,
                   instruction:
                     "Not published and not reviewed: each findingResponses entry must name, once, the id of a finding in Guardian's latest publication denial; answerable lists them. Remove or correct the others and call finish_build again.",
+                  executionContext: yield* executionContext(),
+                });
+              }
+              // Only the host's own record shows a finding wrong: a file the minter wrote is no
+              // evidence, so an answer citing one is refused before review.
+              const unrecorded = (proposed.findingResponses ?? []).flatMap(({ evidence }) =>
+                evidence?.path === undefined || hostRecordedEvidencePath(evidence.path)
+                  ? []
+                  : [evidence.path],
+              );
+              if (unrecorded.length > 0) {
+                const reason = "finding_evidence_unrecorded";
+                pendingDecision = hostRefusalDecision(reason, evidence.executionId, write);
+                yield* diagnose({ phase: "publication", code: "PublicationUnavailable", reason });
+                return JSON.stringify({
+                  status: "not_published",
+                  code: "PublicationUnavailable",
+                  reason,
+                  unrecorded: [...new Set(unrecorded)],
+                  userInputRequired: false,
+                  instruction:
+                    "Not published and not reviewed: a findingResponses evidence path must name a capture the host recorded, under captures/, or publication/tests.json, never a file you wrote. Cite a live test caseId or such a capture, or leave the evidence out, and call finish_build again.",
                   executionContext: yield* executionContext(),
                 });
               }
