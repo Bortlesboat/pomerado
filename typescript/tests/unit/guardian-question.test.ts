@@ -806,7 +806,7 @@ const ownerNamingRoute =
 
 it("tells the execution and question reviews how the owner names an off-site origin", async () => {
   expect(guardianExecutionPolicy(nativeExecutionEnvironment)).toContain(
-    `only the owner's pick of an option naming it does. When an escalation needs the owner to name an off-site origin, say how in its rationale: ${ownerNamingRoute} The {{secret.<id>}} handle,`,
+    `only the owner's pick of an option naming it does. When an escalation needs the owner to name an off-site origin, say how in its rationale. ${ownerNamingRoute} The {{secret.<id>}} handle,`,
   );
   const requests = scripted([[message({ outcome: "allow_business", rationale: "Allowed." })]]);
   await Effect.runPromise(
