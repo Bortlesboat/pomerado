@@ -16,12 +16,13 @@ const receipt = "Receipt 1042\nTotal 12.50\n";
 /**
  * Serves one tool over MCP in this process, keeping downloads under `downloads`: by default the
  * receipt write, or a read with `source` that takes a receipt and returns what it placed, under
- * the host's file `limits` when given.
+ * the host's file `limits` when given. `inputSchema` replaces the published input schema.
  */
 const serve = async (
   url: string,
   downloads: string,
   read?: { readonly source: string; readonly limits?: FileLimits },
+  inputSchema: unknown = contractJsonSchema(Schema.Struct({ receipt: FileInput })),
 ) => {
   const scope = Effect.runSync(Scope.make());
   const server = await Effect.runPromise(
@@ -29,7 +30,7 @@ const serve = async (
       artifact: {
         files: [{ path: "src/tool.mjs", content: read?.source ?? receiptTool() }],
         entrypoint: "src/tool.mjs",
-        inputSchema: contractJsonSchema(Schema.Struct({ receipt: FileInput })),
+        inputSchema,
         outputSchema:
           read === undefined
             ? contractJsonSchema(Schema.Struct({ received: Schema.String, statement: FileOutput }))
@@ -363,6 +364,68 @@ test("a download over the host's caps fails the run as the host's limit, never a
     });
   } finally {
     for (const tool of tools) await tool.close();
+    await site.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+/**
+ * The receipt input's published schema with the limits a site states for the file, as a tool's
+ * `fileInputWithin` declares them: `maxBytes` and `extensions` beside `format: "file"`.
+ */
+const limitedReceipt = (limits: Record<string, unknown>) => {
+  const schema = contractJsonSchema(Schema.Struct({ receipt: FileInput })) as {
+    properties: Record<string, Record<string, unknown>>;
+  };
+  return {
+    ...schema,
+    properties: { ...schema.properties, receipt: { ...schema.properties["receipt"], ...limits } },
+  };
+};
+
+test("a run refuses a caller's file over the limit its tool declares for the input before it opens any page", async () => {
+  test.info().annotations.push({
+    type: "slow",
+    description: "One native run of a write that would download and upload through Chromium",
+  });
+  const site = await startFileSite();
+  const directory = await mkdtemp(join(tmpdir(), "pomerado-files-qa-"));
+  const megabyte = 1024 * 1024;
+  const over = join(directory, "over.txt");
+  await writeFile(over, "a".repeat(2 * megabyte));
+  // The write downloads the statement, then uploads the receipt: before, a file over the site's
+  // limit got past the download to the upload, which the host's 25 MiB cap let through.
+  const served = await serve(
+    site.url,
+    join(directory, "downloads"),
+    undefined,
+    limitedReceipt({ maxBytes: megabyte }),
+  );
+  try {
+    const refused = await settled(
+      served.client,
+      served.client.callTool({
+        name: "send_receipt",
+        arguments: { input: { receipt: pathToFileURL(over).href }, idempotency_key: "over" },
+      }),
+    );
+    // The caller's input is refused, naming the input and the limit, and no write was entered.
+    expect(refused.isError, JSON.stringify(refused)).toBe(true);
+    expect(refused.structuredContent, JSON.stringify(refused)).toMatchObject({
+      status: "failed",
+      code: "input_rejected",
+      write_status: "not_attempted",
+      possible_commit: false,
+      retry: "fix_input",
+    });
+    expect(JSON.stringify(refused.structuredContent)).toContain(
+      `Caller input error: receipt is ${2 * megabyte} bytes, over the site's limit of ${megabyte} bytes`,
+    );
+    // The run reached nothing on the site: no page load, no download, no upload.
+    expect(site.requested).toEqual([]);
+    expect(site.received).toEqual([]);
+  } finally {
+    await served.close();
     await site.close();
     await rm(directory, { recursive: true, force: true });
   }

@@ -1231,7 +1231,10 @@ it("has a tool return the site's no to a valid request as a declared refusal quo
     "- A write that declines the task because the caller's own limit or the page's state rules it out, such as a total over the caller's price limit or a product number whose page names another item than the caller's: `InvalidInput`, thrown before the mark of the commit it guards (writes skill). Pass `field`, the input the caller would change, `kind`, the reason as a stable lowercase token such as `over_price_limit` or `item_mismatch`, and `available` where the page lists choices,",
   );
   expect(text("caller-input")).toContain(
-    "A write returns a refusal as its output only when its output schema declares that refusal, and only where the writes skill says one completes the run, such as before its first mark: any other output a write returns without `verified()` reports a possible change. - When the site itself says no to a valid request, such as an item out of stock or a variant it does not offer, prefer the writes skill's refusal quoting the site. - A write whose steps",
+    "A write returns a refusal as its output only when its output schema declares that refusal, and only where the writes skill says one completes the run, such as before its first mark: any other output a write returns without `verified()` reports a possible change.",
+  );
+  expect(text("caller-input")).toContain(
+    "- When the site itself says no to a valid request, such as an item out of stock or a variant it does not offer, prefer the writes skill's refusal quoting the site. - A write whose steps",
   );
   expect(text("caller-input")).toContain(
     "(writes skill). - A read whose site says no to the whole request, such as a product it no longer sells, prefers returning that no as a declared refusal with `site_message` over throwing (writes skill). - A write that declines",
@@ -1286,17 +1289,17 @@ it("renders the pinned standalone authoring", async () => {
       .filter(([path]) => path !== "reference/publication-review.md")
       .map(([path, text]) => [sha256(text), `workspace/${path}`]),
   ]).toStrictEqual([
-    ["e28ade23d65417001d0310311d9154ef73793b0d85e655f9ac2d191191dd3fef", "core"],
+    ["24e70e8353f1cf1203d1888d53bd8457bb976936857e34ceeb600da98b86764f", "core"],
     ["933e2daac360d31beeeb2a8aeabcf22ca8512cc0272f321b047106f4a2055ab3", "search"],
     ["930550863b9f83e98719b77bc149b20e70b526a88a16dd758d44ab20d048d8cb", "auth"],
     ["fe414151bf943f40c38f5b1451dcfe5823fc81bafc3598a493fe0c2bfe90ba24", "testing"],
     ["2b559ad88157f28be2a054787f4c736cf192bb825760bdf3050c01a59d060ba8", "pagination"],
-    ["9bdfbeacd87c777734e2f2fb3fc934676433a5e7881980000f2c25706ac6d66c", "forms"],
+    ["0f45b38331f51d0d503a26806d8a96b545a6dd4ca03eddce2c585debf2c569a2", "forms"],
     ["3a907b1f23f0f637f30adad9939751c9052a540fa182d14ed412bb071cac68d1", "writes"],
     ["d06f650fc09f74d3711e043da2303de97ced42c9ff2541d48ec28cd7e686519d", "cart"],
-    ["25936094f866a7739d5615ef2f4bab8c62f3616cb94dabebe635fd6bca679c81", "caller-input"],
+    ["b6dd72d69c30ac9a1818ac1baeae48e701cd318f04d11e04ef8c03d812b91a16", "caller-input"],
     ["fb7cd6b0929612a94dd6e0a3c54fa42e102ada77ccd83059fe818a01d8307cf0", "publication"],
-    ["18ff0d5d0690fddb93383622ea21cabe421c052564c04219dda27cfe18f854ee", "workspace/AGENTS.md"],
+    ["5a640cd05ced1ac6f5dd8772257593ae52233529934c317b9a11878f45e3cb5d", "workspace/AGENTS.md"],
     ["9501ae9c273d5d4db8976a544879f7aee44212c8a616b00e74263dcd3c593035", "workspace/README.md"],
   ]);
 });
@@ -1417,7 +1420,7 @@ it("renders the search URL fast path only when a host turns it on", async () => 
     [sha256(on.agents), "workspace/AGENTS.md"],
   ]).toStrictEqual([
     ["0386d3e23fb8cd652f7c64320b940b6a61c7ed9fb3315579fe5521c835789b42", "search"],
-    ["db2b025295675c96099f570dd39995c06892ef55978afbb719b1eb03b4e156fe", "workspace/AGENTS.md"],
+    ["b803f4be43f079b28fd6c0dd5bee1e7594dbb6f6e96d1dc87ab7ebfe1adde765", "workspace/AGENTS.md"],
   ]);
   expect(on.digests.filter(([, name]) => name !== "search")).toStrictEqual(
     off.digests.filter(([, name]) => name !== "search"),
