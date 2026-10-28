@@ -6,10 +6,12 @@ import { acceptsSource, bytesMatchType, isProgram, sniffedType } from "./file-ty
 import {
   defaultFileLimits,
   FileField,
+  fileFormat,
   FileName,
   FileRefused,
   isFileObject,
   MediaType,
+  SiteFileLimits,
   type FileChannel,
   type FileLimits,
   type FileObject,
@@ -96,6 +98,125 @@ export interface RunFiles extends FileChannel {
 
 /** A refusal before any page call: nothing reached the page. */
 const refuse = (reason: FileRefusalReason) => Effect.fail(new FileRefused({ reason }));
+
+/**
+ * Why a file breaks the limits its site states, else undefined: more bytes than `maxBytes` is
+ * `too_large`, and a name that ends in none of `extensions`, compared without case, is
+ * `not_accepted`.
+ */
+export const siteFileRefusal = (
+  limits: SiteFileLimits,
+  file: { readonly name: string; readonly size: number },
+): "too_large" | "not_accepted" | undefined => {
+  if (limits.maxBytes !== undefined && file.size > limits.maxBytes) return "too_large";
+  const name = file.name.toLowerCase();
+  if (
+    limits.extensions !== undefined &&
+    limits.extensions.length > 0 &&
+    !limits.extensions.some((extension) => name.endsWith(extension.toLowerCase()))
+  )
+    return "not_accepted";
+  return undefined;
+};
+
+/**
+ * The limits a published file field declares beside `format: "file"` (`fileInputWithin`), else
+ * undefined. A keyword that is not a valid limit is left out.
+ */
+export const declaredFileLimits = (schema: unknown): SiteFileLimits | undefined => {
+  if (typeof schema !== "object" || schema === null || Reflect.get(schema, "format") !== fileFormat)
+    return undefined;
+  const limit = <Key extends keyof typeof SiteFileLimits.fields>(key: Key) => {
+    const decoded = Schema.decodeUnknownEither(SiteFileLimits)({ [key]: Reflect.get(schema, key) });
+    return Either.isRight(decoded) ? decoded.right : {};
+  };
+  const limits = { ...limit("maxBytes"), ...limit("extensions") };
+  return Object.keys(limits).length === 0 ? undefined : limits;
+};
+
+/** Where a schema walk stops: a deeper input, or `$ref` chain, is not followed. */
+const maximumLimitDepth = 64;
+const plainName = /^[A-Za-z_$][A-Za-z0-9_$]*$/u;
+
+/**
+ * Each file the input names in a field whose published schema declares site limits, with the
+ * field's path as an input issue names it (`applicant.resume`, `documents[0]`). It follows
+ * properties, array items, `anyOf`, `oneOf`, `allOf` and `$ref`s into the schema's own `$defs`
+ * or `definitions`.
+ */
+export const limitedInputFiles = (
+  inputSchema: unknown,
+  input: unknown,
+): readonly {
+  readonly path: string;
+  readonly reference: string;
+  readonly limits: SiteFileLimits;
+}[] => {
+  const found = new Map<string, { path: string; reference: string; limits: SiteFileLimits }>();
+  const record = (value: unknown): value is Readonly<Record<string, unknown>> =>
+    typeof value === "object" && value !== null && !Array.isArray(value);
+  const resolve = (schema: Readonly<Record<string, unknown>>) => {
+    const reference = schema["$ref"];
+    if (typeof reference !== "string") return schema;
+    const match = /^#\/(\$defs|definitions)\/([^/]+)$/u.exec(reference);
+    const definitions = match === null || !record(inputSchema) ? undefined : inputSchema[match[1] ?? ""];
+    const name = match?.[2]?.replaceAll("~1", "/").replaceAll("~0", "~");
+    const target = record(definitions) && name !== undefined ? definitions[name] : undefined;
+    return record(target) ? target : undefined;
+  };
+  const visit = (node: unknown, value: unknown, path: string, depth: number): void => {
+    if (depth > maximumLimitDepth || !record(node)) return;
+    const schema = resolve(node);
+    if (schema === undefined) return;
+    if (schema !== node) return visit(schema, value, path, depth + 1);
+    for (const key of ["anyOf", "oneOf", "allOf"]) {
+      const branches = schema[key];
+      if (Array.isArray(branches))
+        for (const branch of branches) visit(branch, value, path, depth + 1);
+    }
+    const limits = declaredFileLimits(schema);
+    if (limits !== undefined && typeof value === "string" && !found.has(path))
+      found.set(path, { path, reference: value, limits });
+    const properties = schema["properties"];
+    if (record(properties) && record(value))
+      for (const [name, property] of Object.entries(properties))
+        if (Object.hasOwn(value, name))
+          visit(
+            property,
+            value[name],
+            plainName.test(name)
+              ? `${path === "" ? "" : `${path}.`}${name}`
+              : `${path}[${JSON.stringify(name)}]`,
+            depth + 1,
+          );
+    const items = schema["items"];
+    if (Array.isArray(value))
+      value.forEach((item: unknown, index) =>
+        visit(
+          Array.isArray(items) ? (items[index] ?? schema["additionalItems"]) : items,
+          item,
+          `${path}[${index}]`,
+          depth + 1,
+        ),
+      );
+  };
+  visit(inputSchema, input, "", 0);
+  return [...found.values()];
+};
+
+/**
+ * What a caller reads when its file breaks the limits the site states for `path`: the input, the
+ * limit and what to send instead, never the file's name or contents. It starts "Caller input
+ * error:", as a refusal of the input alone, checked before any site action, does.
+ */
+export const siteFileRefusalMessage = (
+  path: string,
+  limits: SiteFileLimits,
+  refused: { readonly reason: "too_large" | "not_accepted"; readonly size: number },
+) =>
+  refused.reason === "too_large"
+    ? `Caller input error: ${path} is ${refused.size} bytes, over the site's limit of ${limits.maxBytes} bytes for this file. Send a smaller file.`
+    : `Caller input error: ${path} is not a file type the site takes for this input, which takes only ${(limits.extensions ?? []).join(", ")}. Send a file of one of those types.`;
 
 /** A name a browser can be given: the host's, else a plain fallback. */
 const safeName = (name: string, fallback: string) =>
@@ -195,7 +316,7 @@ export const makeRunFiles = (options: {
           answer.success ? Effect.succeed(answer.result) : Effect.fail(new Error(answer.error)),
         ),
       );
-    const place: RunFiles["place"] = ({ reference, field, timeoutSec }) =>
+    const place: RunFiles["place"] = ({ reference, field, timeoutSec, maxBytes, extensions }) =>
       Effect.gen(function* () {
         // The field is data the host writes into its own locator; anything else is refused.
         if (Either.isLeft(Schema.decodeUnknownEither(FileField)(field)))
@@ -207,6 +328,15 @@ export const makeRunFiles = (options: {
         const source = yield* options.hook
           .open(resolved)
           .pipe(Effect.mapError(() => new FileRefused({ reason: "unavailable" })));
+        // The site's own limits, when the script names them, refuse the file before a byte is read.
+        const outside = siteFileRefusal(
+          {
+            ...(maxBytes === undefined ? {} : { maxBytes }),
+            ...(extensions === undefined ? {} : { extensions }),
+          },
+          source,
+        );
+        if (outside !== undefined) return yield* refuse(outside);
         if (source.size > limits.fileBytes) return yield* refuse("too_large");
         if (!(yield* fits(source.size))) return yield* refuse("run_limit");
         const bytes = yield* source.read.pipe(
