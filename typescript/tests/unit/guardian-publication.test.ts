@@ -1016,7 +1016,7 @@ describe("the publication policy", () => {
   // site's own search, goes to the minter as a case to add, not to the owner as a scope question.
   it("sends a gap the minter can close to the minter, not the owner", () => {
     const rule =
-      "When the minter can close such a gap itself, such as with a passing case on another record the tool's inputs already claim, reached through the site's own search, listings or links, prefer naming that case for the minter to add over asking the owner to confirm or authorize the tool's scope; prefer asking the owner only for a choice only the owner can make, such as spending money, cutting the tool's scope or a sign-in.";
+      "When the minter can close such a gap itself, such as with a passing case on another record the tool's inputs claim, reached through the site's own search, listings or links, prefer naming that case over asking the owner to confirm or authorize the tool's scope, which replaces, for such a gap, the rule that a denial has the minter ask the owner about a capability that looks unverifiable; leave the owner the choices that are theirs, such as spending money, cutting the tool's scope or a sign-in.";
     expect(publicationLiveTestsPolicy).toContain(
       `naming what no case tests, so the minter runs or fixes the cases. ${rule} `,
     );
