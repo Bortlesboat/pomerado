@@ -7015,13 +7015,19 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                             "A change to the published tool's contract needs its owner's confirmation, and nothing changed. Ask with request_input, naming the change and what the site no longer shows, then call mint_update again naming the questions answered in confirmedBy.",
                         });
                     }
+                    // Running signed out narrows what the build may do, on a host that keeps
+                    // the sign-ins that must stay (`signedOutNarrows`).
+                    const narrows = (change: TaskChange) =>
+                      dependencies.signedOutNarrows === true &&
+                      change.setting === "login" &&
+                      change.change === "signed_out";
                     if (
                       submitted.recommend === "update" &&
                       submitted.confirmedBy.length === 0 &&
                       submitted.changes.some(
                         (change) =>
                           change.setting === "site" ||
-                          change.setting === "login" ||
+                          (change.setting === "login" && !narrows(change)) ||
                           change.setting === "effect",
                       )
                     )

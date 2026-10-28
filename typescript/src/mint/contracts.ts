@@ -2730,6 +2730,14 @@ export interface MintDependencies {
    */
   readonly siteMoveUnsupported?: true;
   /**
+   * The host takes a `login` `signed_out` change as narrowing what the build may do: it gives up
+   * the sign-in only where the build may go on signed out, and keeps any sign-in that must stay,
+   * such as a write's that its owner has not agreed to drop. The harness then sends such an update
+   * to Guardian's review with no caller confirmation. Absent, every `login` change needs the
+   * caller's confirmation, as before.
+   */
+  readonly signedOutNarrows?: true;
+  /**
    * In maintenance, who can confirm a `mint_update` to the published tool's registered contract:
    * `owner` when the person the repair's questions reach may manage the tool, `owner_request`
    * when, in addition, the maintenance is that owner's own request to change the tool, otherwise
