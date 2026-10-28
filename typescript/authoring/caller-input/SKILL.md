@@ -103,6 +103,10 @@ separately are both applied as given, even when they're far apart.
      its output only when its output schema declares that refusal, and only where the writes
      skill says one completes the run, such as before its first mark: any other output a write
      returns without `verified()` reports a possible change.
+   - A read whose search for the caller's name or place opens one record whose name or place
+     differs from the caller's value: prefer `InvalidInput`, with `field` that input and
+     `available` that record as the input takes it, over `InputNotApplied`, which is for a valid
+     value the page didn't apply. Don't return that record's data as the caller's answer.
    - When the site itself says no to a valid request, such as an item out of stock or a variant
      it does not offer, prefer the writes skill's refusal quoting the site.
    - A write whose steps may have changed the site and then failed or could not confirm the
