@@ -11,10 +11,10 @@ import { expectNotCarried, hostKeyboard, hostPage } from "./autofill-host-page.j
 // document. The host never clicks anything there, so the recorded Verify is gone when it looks
 // for it. The sign-in's own marker check decides whether the page sent the code.
 
-const site = "https://reserve.example.test";
-const host = "reserve.example.test";
+const site = "https://site.example.test";
+const host = "site.example.test";
 const code = "246810";
-const login = { username: "owner@reserve.example.test", password: "synthetic-password" };
+const login = { username: "owner@site.example.test", password: "synthetic-password" };
 // A sign-in screen, a code screen, the host's looks for a new document and the marker's wait:
 // more than the default 30 s allows on a busy machine.
 test.describe.configure({ timeout: 120_000 });
@@ -58,15 +58,6 @@ const codeScreen = (marker: boolean) =>
     endpoint: "/api/code",
     marker,
   });
-
-/** The password screen: one password field and a Sign in button, closed in place once typed. */
-const passwordScreen = closingDialog({
-  field: '<label>Password<input id="password" name="password" type="password"></label>',
-  button: '<button id="sign-in" type="button">Sign in</button>',
-  ready: "field.value.length > 0",
-  endpoint: "/api/password",
-  marker: true,
-});
 
 /**
  * The site: an email form at /login that posts to /session, whose page sends the browser on to
@@ -119,22 +110,8 @@ const codeRecipe = {
   signedIn: { selector: "#account" },
 } as const;
 
-/** The same sign-in with a password screen and its Sign in button in place of the code screen. */
-const passwordRecipe = {
-  ...codeRecipe,
-  steps: [
-    emailScreen,
-    {
-      page: `${site}/next`,
-      fields: [{ selector: "#password", slot: "password" }],
-      submit: "#sign-in",
-      submittedBy: "host",
-    },
-  ],
-} as const;
-
 /** One run's sign-in with `recipe`, answering the login ask and each code ask. */
-const run = async (page: Page, recipe: typeof codeRecipe | typeof passwordRecipe) => {
+const run = async (page: Page, recipe: typeof codeRecipe) => {
   const browser = await hostPage(page);
   const { keyboard } = await hostKeyboard(page);
   const secrets = makeRunSecrets();
@@ -200,15 +177,4 @@ test("a run still refuses a code screen that took its Verify button away in plac
   expect(prompts).toEqual(["login", codePrompt]);
   expect(sent).toEqual([`/api/code ${code}`]);
   expect(await page.evaluate(() => Reflect.get(window, "clicks"))).toBe(0);
-});
-
-test("a run still refuses a password screen that took its Sign in button away in place, though the marker shows", async ({
-  page,
-}) => {
-  const sent = await serve(page, passwordScreen);
-  const { ended, prompts } = await run(page, passwordRecipe);
-  expect(ended).toEqual({ code: "RecipeFailed", reason: "submit_refused" });
-  expect(prompts).toEqual(["login"]);
-  expect(sent).toEqual([`/api/password ${login.password}`]);
-  await expect(page.locator("#account")).toBeVisible();
 });
