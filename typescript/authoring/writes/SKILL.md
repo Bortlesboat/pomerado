@@ -151,9 +151,11 @@ During the session:
 - Before committing, read back from the page what you are about to submit and check each
   value as the core skill's Confirm step says, against the option the tool picked when it
   picked one, or the site's version of a typed value it rewrote (below), in the session and
-  on every branch of the composed script. Fail if one does not match, and prefer running
-  this check before the step's commit mark, so a mismatch stops the step before it sends
-  anything. Never read back a field filled with a secret handle.
+  on every branch of the composed script. When a structured value ("Check the read-back")
+  does not match, pick or type it once more, and throw `InputNotApplied` if it still differs.
+  Prefer running this check before the step's commit mark, so a mismatch stops the step before
+  it sends anything. A free-text value the page rewrote is kept, as the next bullet says. Never
+  read back a field filled with a secret handle.
 - Read each typed value back once its field settles, before the step's commit. When the site
   rewrote it as it was typed or on leaving the field, such as an address it standardized, or
   offered exactly one suggestion for it, take the site's version, as you would a picked
@@ -180,21 +182,24 @@ During the session:
   that option's label or that version, and the caller's value otherwise. It
   accepts the same value in another format or word order, such as 1,50 for 1.5, and every
   number must be the caller's, the same numbers in the same order. When the site kept a
-  different value, save that
+  different structured value, save that
   page again once with the same entries and read it back again, but only when saving it again
   updates the same record or page, never when the save adds an item, such as a cart line or a
-  row. Prefer `saveAndReadBack` from `pomerado/runtime` for such a page's save: it does both
-  and returns the values that still differ. When one still differs, or a page whose save adds
-  an item kept a different value, stop before the final commit's mark and throw
-  `InputNotApplied` with its `field`, `requested` and `applied`.<!-- pomerado:section writes.several-saves -->
+  row. Prefer `saveAndReadBack` from `pomerado/runtime` for such a page's save, with the
+  free-text fields in `freeText`: it does both and returns the values that still differ. When a
+  structured value still differs, or a page whose save adds an item kept a different structured
+  value, stop before the final commit's mark and throw `InputNotApplied` with its `field`,
+  `requested` and `applied`. Prefer keeping a free-text value the site saved differently: later read-backs
+  compare against it, and the output lists it in `saved_differences` ("Check the read-back").<!-- pomerado:section writes.several-saves -->
 - When the write changes state that already exists, such as a saved record or a cart
   (.agents/cart/SKILL.md), read that state before the committing step and again after it,
-  in the session and in the composed script. Fail when a field the input sets did not change
-  as asked. Any other difference follows "Check the read-back" below: the script still calls
-  `verified()` and reports the difference in its output. Read both through the same query or
-  view, selecting the same fields: two read paths, such as a list's row and the record's own
-  detail view, can return the same unchanged field in different shapes, and a comparison
-  across them then reports a change that never happened.
+  in the session and in the composed script. Once the commit is confirmed (below), a field the
+  input sets that did not change as asked goes in `saved_differences`, and any other
+  difference follows "Check the read-back" below: the script still calls `verified()` and
+  reports the difference in its output. Read both through the same query or view, selecting
+  the same fields: two read paths, such as a list's row and the record's own detail view, can
+  return the same unchanged field in different shapes, and a comparison across them then
+  reports a change that never happened.
 - If a step meets an option the input does not settle, stop that step before choosing
   it and ask, in one round for the whole page once every value the input and earlier answers supply on it is filled (forms skill). A `request_input` question during the session waits in place; a choice
   that exists only on the page mid-flow, such as a seat on the flight just chosen, is
@@ -338,11 +343,11 @@ too. Run each step with `execute` purpose `act`, target `liveBrowser`.
   own control (core skill), or going to the address in the site's own link, before clicking
   anything behind it.
 - When a read-back is needed, the first one that matches confirms the write; stop there. It
-  matches when it shows
-  the written record after the write, found by something the write produced or entered (its
-  number, its own reference or the values entered), and every field the caller asked
-  for that the view shows agrees (the read before the commit already checked what you
-  entered). Sites reformat what they save, such as line breaks, spaces and dates in the
+  matches when it shows the written record after the write, found by something the write
+  produced or entered (its number, its own reference or the values entered). Compare every
+  field the caller asked for that the view shows (the read before the commit already checked
+  what you entered), and list each one that differs in `saved_differences` ("Check the
+  read-back"). Sites reformat what they save, such as line breaks, spaces and dates in the
   viewer's format, so compare text after the commit with `sameText`, as before it (the core
   skill's Confirm step). Prefer `readBackMatches` for a number the caller gave, such as a
   measurement, an amount or a quantity, since sites save numbers in their own format, such as
@@ -350,8 +355,8 @@ too. Run each step with `execute` purpose `act`, target `liveBrowser`.
   view shows that value; otherwise compare the label it shows. When the write changed state
   that already existed, the same read is also the after read of the before-and-after
   comparison, which runs after `verified()` ("Check the read-back"). Write each read-back step
-  to check the requested fields in its own code and call `verified()` when they hold, so the
-  first one that matches is the confirming step. Read one
+  to compare the requested fields in its own code and call `verified()` once it finds the
+  record, so the first one that matches is the confirming step. Read one
   confirmation, list or detail view: find the record there by that identity, never by its
   position, such as the first or newest row, and prefer finding each value in it by a stable
   id, its column header or a `data-` attribute over its cell's position. Read only that record,
@@ -425,6 +430,12 @@ and is not a second write.
 The read-back, as the session's rules above describe it, compares what the site saved with what
 the caller asked for, in the form the site saves it.
 
+A structured value has one exact reading: an option or record the tool picks, a yes or no, a
+number, date, time or amount, an email, a phone number, or a reference code or ID the caller
+gives. Free text is words the caller typed into a text box that a site may respell or
+standardize, such as a name, an address or any part of it, its postal code included, a city or a
+note.
+
 - A reference, such as a person, an assignee, a linked record or a linked row, is often saved as
   the referenced record's ID while the page shows its label. Take the caller's label or ID as the
   input. Before the commit, look the ID up through the site's own list: the picker's options, the
@@ -456,13 +467,20 @@ the caller asked for, in the form the site saves it.
   bringing both reads to one shape, never by object identity, serialized text or the order of
   an object's keys: the same person or record returned as a new object is unchanged, and a
   reference compares by its ID, as above.
-- Once the commit is confirmed and every field the input sets reads back as asked, the write
-  applied: call `verified()` then. Run the before-and-after comparison after it, over the reads
-  the call already made, and report a difference it finds in the output, in a field the output
-  schema declares for it, never by throwing. A throw after a confirmed save fails the run: the
-  caller gets an error in place of the output, though the write landed. When the script confirms from the
-  commit response, take the comparison's after read through the before read's query in the same
-  call, before `verified()`, so that `verified()` stays the last call to the site.
+- Once the commit is confirmed and the read-back found the written record, the write applied:
+  call `verified()` then, even when a value differs. Run the before-and-after comparison after
+  it, over the reads the call already made, and report a difference it finds in the output, in
+  a field the output schema declares for it, never by throwing. A throw after a confirmed save
+  fails the run: the caller gets an error in place of the output, though the write landed.
+  List each field the input sets that the site saved differently, from the commit response or
+  the read-back, in an optional output field `saved_differences`: `{ field, wanted, shown }`,
+  as `saveAndReadBack` returns it, with `shown` left out when the site shows none, and
+  `saved_differences` left out when every value holds. A tool whose output already holds a
+  fuller per-field list of what the site kept lists them there instead. A read-back that can't
+  find the record, or finds it only as it was before the write, calls no `verified()`, so the
+  run reports a possible change. When the script confirms from the commit response, take the
+  comparison's after read through the before read's query in the same call, before
+  `verified()`, so that `verified()` stays the last call to the site.
 - A write with branches, such as create when nothing matches and update when one does, runs
   one branch in the session. Each branch may make its own commit call, such as a create call
   and an update call; keep their confirmation and comparison in shared code that reads back

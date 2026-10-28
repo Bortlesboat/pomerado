@@ -65,6 +65,23 @@ it("saves once when a picked option reads back as the label the tool picked, whi
   expect(short.calls).toEqual(["save", "read", "save", "read"]);
 });
 
+it("saves once when only free text differs, and again when a structured value differs too", async () => {
+  const typed = { city: "Marrow Glen", square_footage: 1875 };
+  const page = site(() => ({ city: "Brindle Township", square_footage: "1,875" }));
+  await expect(
+    saveAndReadBack({ save: page.save, read: page.read, wanted: typed, freeText: ["city"] }),
+  ).resolves.toEqual([{ field: "city", wanted: "Marrow Glen", shown: "Brindle Township" }]);
+  expect(page.calls).toEqual(["save", "read"]);
+  const both = site(() => ({ city: "Brindle Township", square_footage: "1,460" }));
+  await expect(
+    saveAndReadBack({ save: both.save, read: both.read, wanted: typed, freeText: ["city"] }),
+  ).resolves.toEqual([
+    { field: "city", wanted: "Marrow Glen", shown: "Brindle Township" },
+    { field: "square_footage", wanted: "1875", shown: "1,460" },
+  ]);
+  expect(both.calls).toEqual(["save", "read", "save", "read"]);
+});
+
 it("counts a value the read-back no longer shows as different", async () => {
   const page = site(() => ({ ...kept, owner: null }));
   const { owner: _owner, ...withoutOwner } = kept;

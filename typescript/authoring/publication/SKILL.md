@@ -148,7 +148,8 @@ first:
     input");
   - A write's `<input>_note` reporting a value the site rewrote as it was typed, on leaving the
     field, or through its one suggestion is not unapplied input; the tool read the site's version
-    back and returns it.
+    back and returns it. Nor is a write's `saved_differences` listing a value the site saved
+    differently after the final commit, or free text a save before it rewrote.
   - a free-text place, name or venue that matches several of the site's options equally either
     takes the first in the site's order and returns the one it used, as the site labels it, or
     lists them for the caller to choose one, as the tool decides (core skill, the input schema);
@@ -225,9 +226,9 @@ pomerado:section publication.declared-refusal:end -->
      before-and-after comparison that compares whole objects or serialized text, reads through
      another query after the commit than before it, or counts a field the site maintains as a
      change, a branch the session did not run that confirms through its own code (its own commit
-     call is fine), and a throw after a confirmed commit whose requested fields read back as asked,
-     are findings too, as is a coverage claim that a check passed offline over a body that was not
-     saved whole.
+     call is fine), a throw after a confirmed final commit once the read-back found the written
+     record, and a stop before it on free text a save rewrote, are findings too, as is a coverage
+     claim that a check passed offline over a body that was not saved whole.
 
 ## Never put these in published files
 
