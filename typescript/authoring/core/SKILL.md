@@ -568,8 +568,10 @@ that depends on them:
    commas and hyphens between letters, reads a space, hyphen, slash or parentheses between
    digits as one separator while the groups still count, so 29 59 matches 29-59 but never 2959
    or 2 959, and accepts a word the page shortened, such as St for Saint. Prefer it over
-   exact equality, since a page may echo a query or name in its own case or short form, and
-   prefer comparing numbers, dates and amounts as values. When the page kept another value
+   exact equality, since a page may echo a query or name in its own case or short form. Prefer
+   `readBackMatches(shown, wanted)` from the same module for a number or date the caller gave,
+   such as a measurement, an amount, a quantity or a date, since sites write them in their own
+   format, such as 1,50 for 1.5. When the page kept another value
    after the tool's bounded retries, throw
    `InputNotApplied` (above); never read on with the page's value, except in the cases the
    caller-input skill lists as not unapplied, such as a number snapped as in step 2.

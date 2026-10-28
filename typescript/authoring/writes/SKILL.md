@@ -178,8 +178,9 @@ During the session:
   `readBackMatches(shown, wanted)` from `pomerado/runtime`, against the option the tool picked
   when it picked one, or the site's version of a typed value it rewrote (above): `wanted` is
   that option's label or that version, and the caller's value otherwise. It
-  accepts the same value in another format or word order, and every number must match
-  exactly, the same numbers in the same order. When the site kept a different value, save that
+  accepts the same value in another format or word order, such as 1,50 for 1.5, and every
+  number must be the caller's, the same numbers in the same order. When the site kept a
+  different value, save that
   page again once with the same entries and read it back again, but only when saving it again
   updates the same record or page, never when the save adds an item, such as a cart line or a
   row. Prefer `saveAndReadBack` from `pomerado/runtime` for such a page's save: it does both
@@ -339,7 +340,9 @@ too. Run each step with `execute` purpose `act`, target `liveBrowser`.
   for that the view shows agrees (the read before the commit already checked what you
   entered). Sites reformat what they save, such as line breaks, spaces and dates in the
   viewer's format, so compare text after the commit with `sameText`, as before it (the core
-  skill's Confirm step). Compare a chosen option's value only where the
+  skill's Confirm step). Prefer `readBackMatches` for a number the caller gave, such as a
+  measurement, an amount or a quantity, since sites save numbers in their own format, such as
+  1,50 for 1.5. Compare a chosen option's value only where the
   view shows that value; otherwise compare the label it shows. When the write changed state
   that already existed, the same read is also the after read of the before-and-after
   comparison, which runs after `verified()` ("Check the read-back"). Write each read-back step

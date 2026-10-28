@@ -62,6 +62,47 @@ it("keeps a number's decimal point and every one of its digits", () => {
   expect(readBackMatches("1 555 010 0199", "15550100199")).toBe(true);
 });
 
+it("reads one comma or point between a number's digits as its decimal mark, without zeros after it", () => {
+  // Each pair gives the same answer in either order.
+  const same = [
+    ["1,5", "1.5"],
+    ["28,0", "28"],
+    ["8,20", "8.2"],
+    ["-0,5", "-0.5"],
+    ["10.0", "10"],
+  ] as const;
+  const different = [
+    ["1,5", "15"],
+    ["28,1", "28"],
+    ["1,25", "1.2"],
+    ["10.0", "100"],
+    // Three digits after a lone mark keep today's reading, so neither is ever 1.25.
+    ["1,250", "1.25"],
+    ["1.250", "1.25"],
+  ] as const;
+  for (const [pairs, equal] of [
+    [same, true],
+    [different, false],
+  ] as const) {
+    for (const [one, other] of pairs) {
+      for (const [shown, wanted] of [
+        [one, other],
+        [other, one],
+      ] as const) {
+        expect(sameText(shown, wanted), `sameText ${shown} | ${wanted}`).toBe(equal);
+        expect(sameText(shown, wanted, { rewrite: true }), `rewrite ${shown} | ${wanted}`).toBe(equal);
+        expect(rankByWords(wanted, [shown]), `rankByWords ${wanted} | ${shown}`).toEqual([equal ? 1 : 0]);
+        expect(readBackMatches(shown, wanted), `readBackMatches ${shown} | ${wanted}`).toBe(equal);
+      }
+    }
+  }
+  // Digit groups split by a space, hyphen or slash still match only group for group.
+  expect(readBackMatches("29 59", "29-59")).toBe(true);
+  expect(readBackMatches("29/59", "29 59")).toBe(true);
+  expect(readBackMatches("2959", "29 59")).toBe(false);
+  expect(readBackMatches("1/12", "11/2")).toBe(false);
+});
+
 it("ignores characters that never show, and reads a combining accent as the letter's", () => {
   expect(rankByWords("Exemple Bay", ["Exem​ple Bay", "Ex­emple Bay", "Exemple⁠ Bay", "﻿Exemple Bay"])).toEqual([
     1, 1, 1, 1,
