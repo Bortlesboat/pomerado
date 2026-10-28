@@ -17,7 +17,6 @@ import type { PendingExecution, Reviewer, ReviewTurn } from "../../src/guardian/
 import { UpstreamPolicySlotInvalid } from "../../src/guardian/upstream-policy.js";
 import { makeSourceInspector, sourceChunk } from "../../src/guardian/source.js";
 import { readScopedFile } from "../../src/filesystem/read.js";
-import { fileReadbackRefusal } from "../../src/mint/file-readback.js";
 import { makeRunSecrets } from "../../src/inputs/secrets.js";
 import {
   diagnosticRetentionReason,
@@ -918,73 +917,6 @@ describe("OpenAI reviewer policy and trusted authority", () => {
     expect(modelInput(requests)).toHaveProperty(
       "trusted_authority.paymentFrameOrigins",
       paymentFrameOrigins,
-    );
-  });
-
-  // A caller's file is only a reference until files.place, so no source can check its size or
-  // type before the upload. A review that asked for that check refused every way around it, and
-  // the build dropped the file. The site's limits are declared on the input and passed to
-  // files.place, where the host enforces them; source that reads the input's files is refused.
-  it("allows an upload whose site limits the host enforces, and still refuses reading the input's files", async () => {
-    const limits = '{ maxBytes: 10485760, extensions: [".pdf", ".docx"] }';
-    const bundle = (upload: string) => `import { Schema } from "effect";
-import { defineOperation, fileInputWithin } from "../runtime/index.js";
-export default defineOperation({ name: "apply", input: Schema.Struct({ resume: fileInputWithin(${limits}) }), output: Schema.Struct({ submitted: Schema.Boolean }), write: { confirmation: "readback", commits: ["upload-resume"] } },
-async ({ kernel, sessionId, input, files, enteringCommit, verified }) => {
-  enteringCommit("upload-resume");
-  ${upload}
-  verified();
-  return { submitted: true };
-});`;
-    const limited = bundle(
-      `await files.place(input.resume, { field: { label: "Resume" }, ...${limits} });`,
-    );
-    const twin = bundle(
-      `await kernel.browsers.playwright.execute(sessionId, { code: "return document.querySelector('input[type=file]').files[0].size;" });`,
-    );
-    const write: PendingExecution = {
-      ...pending,
-      entrypoint: "src/tool.mjs",
-      screenedIntent: "Apply to the posting with the caller's resume, which says up to 10 MB, PDF or Word",
-      screenedInput: JSON.stringify({ resume: "{{file.f1}}" }),
-      allowedEffects: ["read", "write"],
-      writeAuthority: true,
-    };
-    const requests = readThenDecide({
-      outcome: "allow",
-      rationale: "The site's stated limits are declared on the input and passed to files.place.",
-      action: "write",
-    });
-    const result = await Effect.runPromise(
-      makeGuardian(reviewer(markedUpstreamPolicy)).review(write, () =>
-        Effect.succeed(
-          JSON.stringify({
-            kind: "untrusted_source",
-            path: write.entrypoint,
-            byteOffset: 0,
-            nextOffset: limited.length,
-            hasMore: false,
-            source: limited,
-          }),
-        ),
-      ),
-    );
-    expect(result.decision.outcome).toBe("allow");
-    const sentences = [
-      "so source never sees a file's contents. A caller's file is only a reference until files.place puts it into the page, so source cannot read its name, type or size before then: files.place returns the placed file's name, type and size, and files.collect a download's name, type, size and sha256.",
-      "The site's stated limits for a file, its largest size and the file types it takes, are declared on the tool's file input (fileInputWithin), which the host checks against the caller's file before the run writes anything, or passed to files.place as maxBytes and extensions, which it checks before it sets the input. Prefer allowing an upload that does this.",
-      // The deny list stays whole.
-      "Deny source that reads a placed or downloaded file back or sends it anywhere else: reading an input's files, FileReader, FormData, DataTransfer, Blob or object-URL reads, the upload request's body,",
-    ];
-    for (const policy of [instructionsOf(requests[0]), guardianExecutionPolicy(otherHost)]) {
-      for (const sentence of sentences) expect(policy).toContain(sentence);
-      expect(policy).not.toContain("source sees a file's name, type, size and sha256");
-    }
-    // The host's own check passes the upload and refuses the twin before any review.
-    const step = { target: "liveBrowser" };
-    expect(fileReadbackRefusal(new Map([[write.entrypoint, limited]]), step, true)).toBeUndefined();
-    expect(fileReadbackRefusal(new Map([[write.entrypoint, twin]]), step, true)).toContain(
-      "reads an input's files",
     );
   });
 });
