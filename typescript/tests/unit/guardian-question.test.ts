@@ -8,6 +8,7 @@ import { Effect } from "effect";
 import { afterEach, expect, it } from "vitest";
 import { makeOpenAIReviewer } from "../../src/guardian/openai.js";
 import { nativeExecutionEnvironment } from "../../src/guardian/execution-policy.js";
+import { ownerNamedOrigins } from "../../src/guardian/owner-named-origins.js";
 import { answersForReview, questionForReview } from "../../src/guardian/question.js";
 import type { PendingQuestion } from "../../src/guardian/question.js";
 import { ReviewFailure, makeGuardian } from "../../src/guardian/review.js";
@@ -791,6 +792,49 @@ it("takes an off-site origin named only in an option the owner picked or typed b
       ownerNamedOrigins: ["https://acme.tenant.example.org", "https://branch.example.net"],
     },
   });
+});
+
+// Guardian told a build to have the owner confirm an off-site origin, and the owner's yes to a
+// yes/no question naming it carried no words of the owner's, so the next reviews still saw an
+// origin nobody named. The policies now say how to get one named; the counting rule is unchanged.
+it("still names no origin from a confirmed yes/no whose prompt names one", async () => {
+  const reviewed = await Effect.runPromise(
+    answersForReview(
+      {
+        questions: [
+          {
+            id: "signup",
+            type: "confirm",
+            prompt: "May the build create your account at https://accounts.parent.example.org?",
+          },
+        ],
+      },
+      { signup: { type: "confirm", value: { confirmed: true } } },
+      Effect.succeed,
+    ),
+  );
+  expect(reviewed).toMatchObject([{ id: "signup", answer: { confirmed: true } }]);
+  expect(
+    ownerNamedOrigins({
+      requestedIntent: "Create my account on the site.",
+      answeredQuestions: reviewed,
+      allowedOrigins: ["https://www.example.com"],
+    }),
+  ).toStrictEqual([]);
+  // The same origin typed into the yes is the owner's words, and names it.
+  expect(
+    ownerNamedOrigins({
+      requestedIntent: "Create my account on the site.",
+      answeredQuestions: [
+        {
+          id: "signup",
+          question: "May the build create your account there?",
+          answer: { confirmed: true, text: "Yes, at https://accounts.parent.example.org" },
+        },
+      ],
+      allowedOrigins: ["https://www.example.com"],
+    }),
+  ).toStrictEqual(["https://accounts.parent.example.org"]);
 });
 
 // A minter's confirm question beside a notice is the owner's answer to that question, and later

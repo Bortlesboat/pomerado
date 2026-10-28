@@ -1017,8 +1017,8 @@ describe("the publication policy", () => {
   it("leaves a site's own Remember me choice at its default in both reviews", () => {
     const rule =
       "Prefer leaving a site's own \"Remember me\" or \"Keep me signed in\" choice at its default on the tool's own sign-in. It keeps the account owner's session, which later runs rely on, and it is not a safety default. Never deny the host's own sign-in step over that choice.";
-    expect(publicationSafetyDefaultPolicy.endsWith(` ${rule}`)).toBe(true);
-    expect(guardianExecutionPolicy(nativeExecutionEnvironment)).toContain(`\n${rule}\n`);
+    expect(publicationSafetyDefaultPolicy).toContain(` ${rule} `);
+    expect(guardianExecutionPolicy(nativeExecutionEnvironment)).toContain(`\n${rule} `);
   });
 
   // An edit that drops a tool's unchecking of a preselected partner comparison box is not a fix,

@@ -342,6 +342,24 @@ too. Run each step with `execute` purpose `act`, target `liveBrowser`.
   Prefer confirming the commit from its own response, and prefer closing such a dialog with its
   own control (core skill), or going to the address in the site's own link, before clicking
   anything behind it.
+- When one run repeats a commit for several items, such as adding items to a cart, prefer
+  confirming each item from its own commit response and reading the saved state once after the
+  last item, over reloading the page after every item. When a commit answers a 429, a bot
+  challenge or another block of that kind, such as the site's bot protection answering 403 or an
+  access-denied page, prefer stopping before the next commit and returning each item's outcome:
+  added, refused by the site, or not tried. An item is refused only when the site answered its
+  own commit request with such a block and nothing got past it, and not tried only when its
+  commit step never entered; a block cleared afterwards, a timeout or a missing answer is
+  neither, so read that item back as above. An item its own commit response confirmed stays
+  added even when the block stops the last read. Never guess an item's outcome or return a
+  refused or not-tried item as added. Call `verified()` only when every item is settled as
+  added, refused or not tried and at least one was added. Otherwise, such as when the block also
+  stops an item's read-back, throw `OperationFailure` listing each item's outcome, an unsettled
+  one as unknown, so the run reports a possible change ("What runs do with it").
+- When the caller wants several of the same item, prefer setting the quantity in one commit,
+  through the site's quantity field or option, over committing the item once per unit, which
+  suits a site with no quantity control. Each commit is one item in the outcomes above: a
+  quantity set in one commit is one item, and each unit committed on its own is one.
 - When a read-back is needed, the first one that matches confirms the write; stop there. It
   matches when it shows the written record after the write, found by something the write
   produced or entered (its number, its own reference or the values entered). Compare every
