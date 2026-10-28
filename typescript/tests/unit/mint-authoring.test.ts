@@ -928,7 +928,7 @@ it("has a write confirm from its first matching read-back, never from state befo
 it("has a write ask once to publish without an output the site does not offer, after its verified write", async () => {
   const texts = await renderedTexts("typescript/authoring");
   expect((texts.get("writes") ?? "").replace(/\s+/g, " ")).toContain(
-    "After a verified write, if the site does not offer one output the request asks for, prefer asking the caller once with `request_input` whether to publish the tool with that output null and a reason field, rather than ending blocked; never invent the value.",
+    "In a write build, after a verified write, if the site does not offer one output the request asks for, prefer asking the caller once with `request_input` whether to publish the tool with that output null and a reason field, rather than ending blocked; never invent the value.",
   );
   // The blocked ending for a capability the site lacks points to that ask first.
   const guide = (texts.get("workspace/AGENTS.md") ?? "").replace(/\s+/g, " ");
@@ -937,7 +937,7 @@ it("has a write ask once to publish without an output the site does not offer, a
   );
   // So does the rule that never offers to leave out an output the request names.
   expect(guide).toContain(
-    "A field, input or output the request itself names is never such a capability: support it, or end with `report_blocked` saying why the site cannot; never offer to leave it out, except after a verified write, where the writes skill's ask whether to publish without it comes first.",
+    "A field, input or output the request itself names is never such a capability: support it, or end with `report_blocked` saying why the site cannot; never offer to leave it out, except one output the site does not offer, after a verified write, where the writes skill's ask whether to publish without it comes first.",
   );
 });
 
@@ -1292,11 +1292,11 @@ it("renders the pinned standalone authoring", async () => {
     ["ad5b4f8391094f6d7c8ff4a480b071bb298807da9523971e0aaf7d719f152664", "testing"],
     ["2b559ad88157f28be2a054787f4c736cf192bb825760bdf3050c01a59d060ba8", "pagination"],
     ["4d05ffc26a395fafb591bb8ac593b79ae7450f21f26ac8709cbbe543fc2453df", "forms"],
-    ["b178ece35f8013d5eef8ac56afda6e28066681d1e0b3d2ce16ae6d7ccc78ac02", "writes"],
+    ["60d94f1bc738726cfd31a34cd99b390e8ff7fcc9b6012d917061330c257ad22d", "writes"],
     ["d06f650fc09f74d3711e043da2303de97ced42c9ff2541d48ec28cd7e686519d", "cart"],
     ["14ec800f1f19a16e1a94c11e8a4e869e798bf597d86cd2369a51d32d66c9bc94", "caller-input"],
     ["fb7cd6b0929612a94dd6e0a3c54fa42e102ada77ccd83059fe818a01d8307cf0", "publication"],
-    ["aa7f6655fbcf5caa638dd99d8307095b1bc9bc859cc583bf81c2e9e5f410ff6a", "workspace/AGENTS.md"],
+    ["a319737c69647bb215186a1ab88fb61edfff11c6cc6cec6fb582b490d1bae10a", "workspace/AGENTS.md"],
     ["9501ae9c273d5d4db8976a544879f7aee44212c8a616b00e74263dcd3c593035", "workspace/README.md"],
   ]);
 });
@@ -1417,7 +1417,7 @@ it("renders the search URL fast path only when a host turns it on", async () => 
     [sha256(on.agents), "workspace/AGENTS.md"],
   ]).toStrictEqual([
     ["0386d3e23fb8cd652f7c64320b940b6a61c7ed9fb3315579fe5521c835789b42", "search"],
-    ["797527740d38ad6e6e0cb1c4f58291ab0ed4a9622847cc05ffef5d4a9703659b", "workspace/AGENTS.md"],
+    ["d10403f4fe86cdbe179b2ef53376a14c053fdbe7d151b31fb18018843b1141d5", "workspace/AGENTS.md"],
   ]);
   expect(on.digests.filter(([, name]) => name !== "search")).toStrictEqual(
     off.digests.filter(([, name]) => name !== "search"),
