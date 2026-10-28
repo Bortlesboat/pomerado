@@ -55,8 +55,12 @@ export const foldChoiceText = (text: unknown): string => {
  * never matches Blue Green. A space, hyphen, dash, slash or parentheses between digits is one
  * separator, whichever it is, so 29 59, 29-59 and 29/59 match, and so do (317) 555-1234 and
  * 317-555-1234, but the groups it separates count: 1/12 never matches 11/2, 1 234 never matches
- * 12 34 and 2959 never matches 29 59. A period or comma between digits counts too, so 10.0 never
- * matches 100. Compare numbers, dates and amounts as values instead.
+ * 12 34 and 2959 never matches 29 59. One period or comma between a number's digits is its
+ * decimal mark, whichever it is, and zeros after it drop, so 1,5 matches 1.5, 28,0 matches 28 and
+ * 8,20 matches 8.2, while 1,5 never matches 15, 1,25 never matches 1.2 and 10.0 never matches 100.
+ * Three digits after a lone mark may be thousands, so 1,250 and 1.250 stay as written and never
+ * match 1.25, and a number right after a letter is a code, so v2.10 never matches v2.1. Compare
+ * dates and amounts with `readBackMatches`, which reads them as values.
  *
  * With `{ rewrite: true }`, `shown` is the site's own version of a value the tool typed, `wanted`,
  * such as an address the site standardized as it was entered, and the answer is whether it kept
@@ -67,13 +71,13 @@ export const foldChoiceText = (text: unknown): string => {
  * as long as the full word, and of two letters when it is the full word's start. So Parkway
  * matches PKWY, Suite matches STE and St matches Street, either way, while Main never matches
  * Martin, Mainland or M, Larkspur never matches Lark, Oakwood never matches Oak and Avenue never
- * matches Ave. A number keeps its groups, as above, though the site may pad a group of a grouped
- * number with zeros, as 01/12 for 1/12, or add thousands commas to a bare one, as 1,420 for 1420,
- * and three or more groups split by periods, as in 555.123.4567, are groups as a hyphen splits
- * them. A bare number of seven digits or more, a phone or account number, may come back grouped,
- * so 5551234567 matches (555) 123-4567, but a shorter one never does and a grouped one never
- * comes back regrouped or bare, so 1420 never matches 14-20 and 29-59 never matches 2959. What
- * the site adds is a change, a word holding a digit, a unit or a place alike, so Apt 4 never
+ * matches Ave. A number reads as above and keeps its groups, though the site may pad a group of a
+ * grouped number with zeros, as 01/12 for 1/12, or add thousands commas to a bare one, as 1,420
+ * for 1420, and three or more groups split by periods, as in 555.123.4567, are groups as a hyphen
+ * splits them. A bare number of seven digits or more, a phone or account number, may come back
+ * grouped, so 5551234567 matches (555) 123-4567, but a shorter one never does and a grouped one
+ * never comes back regrouped or bare, so 1420 never matches 14-20 and 29-59 never matches 2959.
+ * What the site adds is a change, a word holding a digit, a unit or a place alike, so Apt 4 never
  * matches Apt 4B, and 1420 Larkspur Rd never matches 1420-2 Larkspur Rd or 1420 Larkspur Rd
  * Apt 2, with three exceptions: a word of one or two Latin letters between two of the caller's,
  * as 100 N Main St adds N to 100 Main St; a country code before a number, as +1 before
@@ -90,6 +94,15 @@ export const sameText = (
   wanted: string,
   options: { readonly rewrite?: boolean } = {},
 ): boolean => {
+  // One period or comma between a number's digits is its decimal mark: the number reads with a
+  // point and without the zeros after it, so 1,50 reads 1.5 and 28,0 reads 28. Three digits after
+  // a lone mark may be thousands, as in 1,250, and a number right after a letter is a code, as in
+  // v2.10, so both stay as written. rankByWords reads numbers the same way.
+  const decimal = (number: string, whole: string, fraction: string) => {
+    if (fraction.length === 3) return number;
+    const kept = fraction.replace(/0+$/u, "");
+    return kept === "" ? whole : `${whole}.${kept}`;
+  };
   const fold = (text: string) => {
     const raw = String(text ?? "").replace(/[\u00AD\u200B\u2060\uFEFF]/gu, "");
     const folded = raw
@@ -99,6 +112,7 @@ export const sameText = (
       .toLowerCase()
       .replace(/(?<!\p{N})['\u2018\u2019\u02bc](?!\p{N})/gu, "")
       .replace(/(?<!\p{N})[.,\-\u2010\u2011\u2012\u2013\u2014](?!\p{N})/gu, " ")
+      .replace(/(?<![\p{L}\p{N}.,])(\p{N}+)[.,](\p{N}+)(?!\p{N}|[.,]\p{N})/gu, decimal)
       .replace(/\s+/gu, " ")
       .trim();
     return folded === "" ? raw.trim() : folded;
@@ -273,12 +287,14 @@ export const sameText = (
  * its day and month could be either way round, as in "03/04/2026". A whole text of 7 to 15 digits
  * with only spaces, periods, hyphens, brackets and a leading +, other than a decimal number such
  * as 1500000.00 or 1234567.8, is one word, all its digits, so a phone or account number matches
- * however it is spaced, and 14155551234 never matches 4155551234. Thousands commas, a trailing .00
- * and currency symbols are dropped, so $1,250.00 matches 1250 and ¥1,500,000 matches 1500000. An
- * email, domain or file name, a word whose digits are joined by a slash, period or hyphen, such as
- * 1.5 or ACCT-0042, and a number with a sign before or after it, such as -5 or 5+, each stay one
- * word, so 12 never matches 123 or 1.2, 1234567.8 never matches 12345678, and 5 never matches -5.
- * A run of single letters is one word, so U.S.A. matches USA.
+ * however it is spaced, and 14155551234 never matches 4155551234. Thousands commas and currency
+ * symbols are dropped, and one period or comma between a number's digits is its decimal mark, as
+ * `sameText` reads it, with the zeros after it dropped, so $1,250.00 matches 1250, ¥1,500,000
+ * matches 1500000, 1,50 matches 1.5 and 28,0 matches 28, while 1,250 is 1250 and 1.250 stays as
+ * written. An email, domain or file name, a word whose digits are joined by a slash, period or
+ * hyphen, such as 1.5 or ACCT-0042, and a number with a sign before or after it, such as -5 or 5+,
+ * each stay one word, so 12 never matches 123 or 1.2, 1234567.8 never matches 12345678, and 5
+ * never matches -5. A run of single letters is one word, so U.S.A. matches USA.
  *
  * Numbers must match exactly: a text whose words holding a digit, read as above, are not the
  * query's, the same ones in the same order, scores 0 whatever else it shares. So 125 Main St never
@@ -351,6 +367,14 @@ export const rankByWords = (query: string, texts: readonly string[]): number[] =
       .trim();
     return folded === "" ? word.trim() : folded;
   };
+  // One period or comma between a number's digits is its decimal mark, as sameText reads it:
+  // the number reads with a point and without the zeros after it, and three digits after a lone
+  // mark, or a number right after a letter, stay as written.
+  const decimal = (number: string, whole: string, fraction: string) => {
+    if (fraction.length === 3) return number;
+    const kept = fraction.replace(/0+$/u, "");
+    return kept === "" ? whole : `${whole}.${kept}`;
+  };
   const wordsOf = (text: string): string[] => {
     const raw = String(text ?? "")
       .replace(/[\u200B\u2060\uFEFF\u00AD]/gu, "")
@@ -365,8 +389,8 @@ export const rankByWords = (query: string, texts: readonly string[]): number[] =
       if (digits.length >= 7 && digits.length <= 15) return [digits];
     }
     const spaced = raw
-      .replace(/(?<![\p{L}\p{N}])(\d{1,3}(?:,\d{3})+)(?!\p{N})/gu, (number) => number.replace(/,/gu, ""))
-      .replace(/(?<![\p{N}.])(\d+)\.0{1,2}(?!\p{N})/gu, "$1")
+      .replace(/(?<![\p{L}\p{N},])(\d{1,3}(?:,\d{3})+)(?!\p{N})/gu, (number) => number.replace(/,/gu, ""))
+      .replace(/(?<![\p{L}\p{N}.,])(\p{N}+)[.,](\p{N}+)(?!\p{N}|[.,]\p{N})/gu, decimal)
       .replace(/[$\u20AC\u00A3\u00A5\u20B9]/gu, " ");
     const words: string[] = [];
     for (const piece of spaced.split(" ")) {
@@ -442,8 +466,9 @@ export const rankByWords = (query: string, texts: readonly string[]): number[] =
  * that adds up to two words to it, and text that drops one of the wanted words is not, unless the
  * value has eleven words or more. So a wanted name inside a longer one, such as Lakeside in North
  * Lakeside, is confirmed. `shown` must hold the numbers `wanted` holds and no others, in the same
- * order: dates, phone numbers and amounts as `rankByWords` reads them, so 1,875 confirms 1875, and
- * other numbers the same, so 125 Main St never confirms 123 Main St and "5 15" never confirms 5.
+ * order: dates, phone numbers, amounts and decimals as `rankByWords` reads them, so 1,875 confirms
+ * 1875 and a site's 1,50 confirms a caller's 1.5, and other numbers the same, so 125 Main St never
+ * confirms 123 Main St, 1,5 never confirms 15 and "5 15" never confirms 5.
  * It calls `sameText` and `rankByWords`, so page code that embeds it embeds those two first.
  */
 export const readBackMatches = (shown: string, wanted: string): boolean =>

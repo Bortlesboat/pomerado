@@ -568,8 +568,10 @@ that depends on them:
    commas and hyphens between letters, reads a space, hyphen, slash or parentheses between
    digits as one separator while the groups still count, so 29 59 matches 29-59 but never 2959
    or 2 959, and accepts a word the page shortened, such as St for Saint. Prefer it over
-   exact equality, since a page may echo a query or name in its own case or short form, and
-   prefer comparing numbers, dates and amounts as values. When the page kept another value
+   exact equality, since a page may echo a query or name in its own case or short form. Prefer
+   `readBackMatches(shown, wanted)` from the same module for a number the caller gave, such as a
+   measurement, an amount or a quantity, since sites write numbers in their own format, such as
+   1,50 for 1.5, and prefer comparing dates as values. When the page kept another value
    after the tool's bounded retries, throw
    `InputNotApplied` (above); never read on with the page's value, except in the cases the
    caller-input skill lists as not unapplied, such as a number snapped as in step 2.
@@ -918,7 +920,14 @@ declines what is not essential, then accept, only when that is the only way out.
 "I understand" or "OK" accepts too, so prefer its close or decline control whenever it has one.
 Never click anything else in it, such as its settings or partner lists. A request that says
 otherwise about cookies wins. This is only for such a banner or pop-up, never a marketing prompt or
-terms the site asks you to accept.
+terms the site asks you to accept, other than the notice below that every visitor accepts.
+
+A notice the site shows every visitor before it lets them use the page, such as a demo or
+test-environment warning, an age gate or a region notice, is page setup on a read. Prefer accepting
+it with its own control the way you dismiss a cookie banner, waiting until the page beneath it is
+usable, with no commit mark and without making the tool a write for it, even when accepting it
+sends a request. Prefer its close control when it has one. When the request is about that notice
+itself, accepting it is the write.
 
 ## Safety defaults
 
