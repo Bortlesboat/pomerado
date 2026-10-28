@@ -664,8 +664,9 @@ const submitCall = (
  * screen still shows, so on a step whose every field takes a code (`codeOnly`) the host first only
  * looks (`lookFirst`), for up to `pageSendMs` from the last field's fill: a look that finds the
  * screen as typed, or is lost, looks again, and any other answer is taken as the submit call's
- * would be. Only then does the submit call click. A click again never looks first: its dismiss may
- * have emptied every box, which a look would take as the page's own send.
+ * would be. Only then does the submit call click. A click again of a blocked screen skips that
+ * first look, and none of its later looks takes every box locked or emptied as the page's own send
+ * (`codeLook`): its dismiss may have emptied every box itself.
  */
 const submitWhenEnabled = (
   input: CallInput,

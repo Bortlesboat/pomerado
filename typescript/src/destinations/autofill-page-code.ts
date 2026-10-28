@@ -302,9 +302,10 @@ if (
 const typedAt = ${JSON.stringify(typedAt)};
 const readsOnly = ${JSON.stringify(call.kind === "submit")} && fields.length > 0 && submit === null;
 // A look clicks nothing, and the host takes one only before it clicked. codeLook: one at a step
-// whose every field takes a code.
+// whose every field takes a code, never on a click again (pressCovered), whose dismiss may have
+// emptied every box itself.
 const looking = ${JSON.stringify(call.kind === "submit" && call.look === true)};
-const codeLook = looking && fields.length > 0 && codeSlots.every(Boolean);
+const codeLook = looking && ${JSON.stringify(call.kind === "submit" && call.pressCovered !== true)} && fields.length > 0 && codeSlots.every(Boolean);
 ${call.kind === "submit" ? pageSentCode : call.kind === "dismiss" ? "" : "await keep(typedAt, primary.url());"}
 for (const check of ${JSON.stringify(check)}) {
   // Its length only, never its value.
@@ -362,7 +363,8 @@ const codeBoxesHoldCode = (boxes: readonly number[]) =>
  * redraws itself while it checks what was typed has not sent it, and the submit call waits on it
  * or refuses as before. A code step's look before the host clicked (`codeLook`) is the exception:
  * a code screen that locks or empties every box the host typed, with nothing clicked, took the code
- * itself, as a widget with no submit does. Its address moving is still no send.
+ * itself, as a widget with no submit does. Its address moving is still no send. A click again's
+ * look is no such exception, since the dismiss before it may have emptied every box itself.
  */
 const pageSentCode = `const originAndPath = (url) => {
   try {
