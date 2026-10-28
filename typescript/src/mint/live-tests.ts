@@ -1214,6 +1214,12 @@ export const liveTestsEvidence = (options: {
   /** The attempt ran out of time for live tests. */
   readonly outOfTime?: boolean;
   /**
+   * The host's batch cap, not time, leaves no live test batch to run again in this attempt, so the
+   * review never asks for evidence only a new run could give. Never set with `outOfTime`, whose
+   * rule keeps each gap a note.
+   */
+  readonly noRunsLeft?: boolean;
+  /**
    * The read signed in, so it ran live tests on at most `signedInTestInputLimit` inputs, and
    * `versions` holds only results run signed in.
    */
@@ -1329,6 +1335,13 @@ export const liveTestsEvidence = (options: {
           }
         : {}),
       ...(outOfTime ? { outOfTime: true } : {}),
+      ...(options.noRunsLeft === true && !outOfTime
+        ? {
+            noRunsLeft: true,
+            noRunsLeftNote:
+              "The host's limit on batches leaves no live test batch to run again in this attempt: a claim no passing case shows can be shown with evidence the build holds, removed, or listed in notTested, not tested anew.",
+          }
+        : {}),
       ...(options.fileProblem === undefined ? {} : { casesFileProblem: options.fileProblem }),
       versions: versionViews,
       cases,

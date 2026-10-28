@@ -114,6 +114,9 @@ export const guardianReviewInput = (
             ...(turn.pending.questionCandidate.buildEffect === undefined
               ? {}
               : { buildEffect: turn.pending.questionCandidate.buildEffect }),
+            ...(turn.pending.questionCandidate.finding === undefined
+              ? {}
+              : { finding: turn.pending.questionCandidate.finding }),
             // The confirm questions that ask the owner to confirm a step a review held.
             ...(turn.sources?.heldStepQuestions === undefined
               ? {}

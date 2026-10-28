@@ -72,7 +72,7 @@ export const outcomeAccepted = (pending: PendingExecution, raw: unknown): boolea
 const reviewFields: Record<ReviewKind, readonly string[]> = {
   execution: ["action", "refusal", "refusalGround", "advice"],
   recovery: ["advice"],
-  question: [],
+  question: ["label"],
   update: [],
   publication: ["reason", "findings", "publicReason", "responseRulings"],
   host: ["label"],
@@ -99,7 +99,8 @@ export const guardianDecisionFormat: AgentOutputType = {
       },
       // A publication denial's short reason for the caller, apart from the private rationale.
       publicReason: { anyOf: [{ type: "null" }, { type: "string" }] },
-      // A host-defined kind's finite code, one its policy lists; the host checks it.
+      // A host-defined kind's or a question review's finite code, one its policy lists; the host
+      // checks it.
       label: { anyOf: [{ type: "null" }, { type: "string" }] },
       // An execution review's label of what the code does on the website.
       action: { anyOf: [{ type: "null" }, { type: "string", enum: [...guardianActions] }] },
