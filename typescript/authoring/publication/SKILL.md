@@ -268,7 +268,10 @@ review's rules, answer it rather than resubmitting unchanged: call `finish_build
 `findingResponses`, one entry per finding you answer, each with its `id`, a short `response` and
 `evidence` that shows it, a live test `caseId` or a file the review reads, such as a capture.
 Guardian rules on each answer in the next review, and a denial returns its `responseRulings`. An
-answer never replaces a live run or capture a finding asks for: run it instead.
+answer never replaces a live run or capture a finding asks for: run it instead. When no live
+test batch can run again (`noRunsLeft` in the host's record), fix an unsupported claim by showing
+it with evidence you hold, removing it or listing it in `notTested`; when that choice is the
+owner's, ask with `request_input` and set its `finding` to the finding's `id`.
 
 Any other reason: read `diagnostic` and the instruction; the existing example stays recorded.
 

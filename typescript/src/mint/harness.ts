@@ -61,7 +61,12 @@ import {
   TaskUpdateRequest,
   withOwnWords,
 } from "./contracts.js";
-import { answersForReview, type AnsweredQuestion } from "../guardian/question.js";
+import {
+  answersForReview,
+  type AnsweredQuestion,
+  questionNotNeededLabels,
+  type QuestionFinding,
+} from "../guardian/question.js";
 import type { ReviewedLiveTestBatch } from "../guardian/review.js";
 import {
   cutToLimit,
@@ -5099,11 +5104,19 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                 ...(yield* inputSchemaOf(httpEntrypoint)),
               });
           }
+          // Whether any batch could still run, as publication's own check reads it.
+          const runsLeft =
+            !liveTestsOutOfTime &&
+            (yield* liveTestBatchFits(
+              dependencies.liveTests,
+              (yield* liveTestDeadline).deadlineAt,
+            ));
           return liveTestsEvidence({
             file: Either.isRight(read) ? read.right : emptyCases,
             ...(Either.isLeft(read) ? { fileProblem: read.left } : {}),
             versions,
             outOfTime: liveTestsOutOfTime,
+            ...(runsLeft ? {} : { noRunsLeft: true }),
             ...(signedInRead ? { signedIn: true } : {}),
           });
         }).pipe(
@@ -5127,10 +5140,11 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
        * only, so a takeover drops it.
        */
       /**
-       * The ids of the findings of Guardian's latest publication denial, the ones the minter may
-       * answer in its next finish_build (`PublicationRequest.findingResponses`).
+       * The findings of Guardian's latest publication denial by id, the ones the minter may answer
+       * in its next finish_build (`PublicationRequest.findingResponses`) or name in a question
+       * (`AgentRequest.finding`), each as the minter read it.
        */
-      let answerableFindings: ReadonlySet<string> = new Set();
+      let answerableFindings: ReadonlyMap<string, QuestionFinding> = new Map();
       let deniedSubmission:
         | {
             readonly paths: readonly string[];
@@ -5808,7 +5822,7 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                   code: "PublicationUnavailable",
                   reason,
                   unanswerable: [...new Set(unanswerable)],
-                  answerable: [...answerableFindings],
+                  answerable: [...answerableFindings.keys()],
                   userInputRequired: false,
                   instruction:
                     "Not published and not reviewed: each findingResponses entry must name, once, the id of a finding in Guardian's latest publication denial; answerable lists them. Remove or correct the others and call finish_build again.",
@@ -6061,7 +6075,14 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                   ]),
                 ];
                 deniedSubmission = yield* submissionSnapshot(proposed, paths);
-                answerableFindings = new Set((denial?.findings ?? []).map(publicationFindingId));
+                answerableFindings = new Map(
+                  (yield* minterFindings(denial?.findings ?? [])).map(
+                    ({ id, category, file, explanation }) => [
+                      id,
+                      { id, category, file, explanation },
+                    ],
+                  ),
+                );
               }
               // Guardian's public reason reaches the caller screened like the caller's other
               // text: credentials and host-private values out, cut to its bound. A screen that
@@ -6646,9 +6667,23 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                   userInputRequired: false,
                   instruction: `A confirm question with confirmsReview needs an id of its own: ${reused.map(({ questionId }) => questionId).join(", ")} already holds an answer or asked about another refusal. Give it a new id and ask again.`,
                 });
+              // A question about a publication finding names one the latest denial holds: the review
+              // judges it against that finding, which the minter cannot write itself.
+              const finding =
+                decoded.finding === undefined ? undefined : answerableFindings.get(decoded.finding);
+              if (decoded.finding !== undefined && finding === undefined)
+                return JSON.stringify({
+                  status: "question_refused",
+                  reason: "finding_unknown",
+                  answerable: [...answerableFindings.keys()],
+                  userInputRequired: false,
+                  instruction:
+                    "finding names the id of a finding in Guardian's latest publication denial, and answerable lists them. Set it to one of those, or leave it out, and ask again.",
+                });
+              const { finding: _finding, ...unmarked } = decoded;
               const proposed = callerVisibleRequest(
                 {
-                  ...decoded,
+                  ...unmarked,
                   questions: decoded.questions.map((question) => {
                     if (question.type !== "confirm") return question;
                     const { endsBuild: _mark, confirmsReview: _confirms, ...asked } = question;
@@ -6694,6 +6729,7 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                   ...(yield* publicationRefusals),
                   ...decidedBuildEffect(),
                   ...(confirms.length === 0 ? {} : { confirms }),
+                  ...(finding === undefined ? {} : { finding }),
                 });
                 yield* reviewCompleted;
                 reviewId = review.reviewId;
@@ -6706,6 +6742,8 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                     ...(reviewId === undefined ? {} : { reviewId }),
                     questionCount: submitted.questions.length,
                     reviewOutcome: review.outcome,
+                    ...(review.label === undefined ? {} : { reviewLabel: review.label }),
+                    ...(finding === undefined ? {} : { aboutFinding: true }),
                     priorExecutions: priorPurposes.length,
                     priorLiveExecutions: executions.filter((entry) => entry.effect !== "not_sent")
                       .length,
@@ -6778,15 +6816,26 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                   });
                 }
                 // The read-or-write question is the turn's only move, so it is never withdrawn.
-                if (review.outcome !== "allow_business")
+                // Any other is asked again in other words unless Guardian found none needed.
+                if (review.outcome !== "allow_business") {
+                  const questionNeeded =
+                    effectQuestion || review.label === undefined || review.label === "other"
+                      ? undefined
+                      : !questionNotNeededLabels.includes(review.label);
                   return JSON.stringify({
                     status: "question_rejected",
                     rationale,
+                    ...(questionNeeded === undefined ? {} : { questionNeeded }),
                     userInputRequired: false,
                     instruction: effectQuestion
                       ? "Reword the question using the rationale and call request_input again. This read-or-write question is required, and no other tool opens until the person answers it. The host sets its two answer labels, so change only the prompt."
-                      : "Reword the question using the rationale, or withdraw it and continue. Do not ask again for a value you were already given or that the site shows. A reworded question is reviewed again.",
+                      : questionNeeded === true
+                        ? "Guardian wants this question in other words: the owner still needs to answer it. Call request_input again with the question reworded as the rationale says; do not drop it. The reworded question is reviewed again."
+                        : questionNeeded === false
+                          ? "Guardian found no question needed: the rationale says why, such as an answer you already have or the default the step keeps. Continue without asking it, and do not ask it again in other words."
+                          : "Call request_input again with the question reworded as the rationale says; the reworded question is reviewed again. Continue without it only when the rationale says plainly that no question is needed, such as for a value you were already given or that the site shows.",
                   });
+                }
               }
               for (const { questionId, reviewId } of confirms) confirmAsks.set(questionId, reviewId);
               askingId = requestId;

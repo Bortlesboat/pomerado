@@ -64,6 +64,7 @@ import type { SignInDiagnostic } from "../execution/sign-in-diagnostics.js";
 import {
   AnsweredQuestion,
   type ConfirmedStepQuestion,
+  type QuestionFinding,
   type QuestionDecision,
 } from "../guardian/question.js";
 import { MintFile } from "./file-handles.js";
@@ -1754,6 +1755,17 @@ export const AgentRequest = Schema.Struct({
     ),
   ).pipe(Schema.minItems(1), Schema.maxItems(8)),
   notice: Schema.optional(Schema.String.pipe(Schema.minLength(1), Schema.maxLength(16_384))),
+  /**
+   * The id of the finding of Guardian's latest publication denial this request is about, such as
+   * one that leaves the owner to choose between keeping a claim with its evidence or dropping it.
+   * The host keeps it from the caller and gives the question review that finding.
+   */
+  finding: Schema.optional(
+    Schema.String.pipe(Schema.minLength(1), Schema.maxLength(200)).annotations({
+      description:
+        "Optional: the id of a finding in Guardian's latest publication denial that this question asks the owner about, such as whether to keep a claim and get its evidence or to remove it or mark it untested. Guardian's question review then sees that finding; the caller never sees the id.",
+    }),
+  ),
 });
 
 /** What the agent asks: the request without the host's id and source. */
@@ -2643,6 +2655,13 @@ export interface MintDependencies {
        * host leaves it out, and the answer reaches later reviews only as an answered question.
        */
       readonly confirms?: readonly ConfirmedStepQuestion[];
+      /**
+       * The finding of the latest publication denial the request names (`AgentRequest.finding`),
+       * as the host recorded it. A host that forwards it to `questionForReview` lets the review
+       * allow a question asking the owner to choose between the fixes the finding permits; an
+       * older host leaves it out.
+       */
+      readonly finding?: QuestionFinding;
     },
   ) => Effect.Effect<QuestionDecision & { readonly reviewId?: string }, MintFailure>;
   /**
