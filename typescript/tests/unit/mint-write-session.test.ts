@@ -338,6 +338,36 @@ describe("a write session's publication check", () => {
       expect(Exit.isSuccess(check([confirmed], placing).result)).toBe(true);
     });
 
+    // After a verified write the caller may choose to publish without one output the site does
+    // not offer: null with a reason beside it. The session's confirmation already proves the
+    // write, so the check publishes that schema from the same session, with no further step.
+    it("publishes one output the site does not offer as null with a reason, on the same session", () => {
+      const issued = contractJsonSchema(
+        Schema.Struct({
+          status: Schema.Literal("issued"),
+          invoice_number: Schema.String,
+          pdf: Schema.String,
+          data_file: Schema.NullOr(Schema.String),
+          data_file_unavailable_reason: Schema.String,
+        }),
+      );
+      let extractions = 0;
+      const exit = Effect.runSyncExit(
+        checkWriteSession({
+          session: { steps: [confirmed] },
+          step: confirmed,
+          extract: Effect.sync(() => {
+            extractions++;
+            return { ...placing, outputSchema: issued };
+          }),
+        }),
+      );
+      expect(exit).toEqual(
+        Exit.succeed({ extracted: { ...placing, outputSchema: issued }, declared: "readback" }),
+      );
+      expect(extractions).toBe(1);
+    });
+
     it("never refuses a republish for the unreadable refusal its published revision has", () => {
       expect(Exit.isSuccess(publish(unreadable, unreadable))).toBe(true);
       expect(reason(publish(unreadable, readable))).toBe("refusal_unreadable");

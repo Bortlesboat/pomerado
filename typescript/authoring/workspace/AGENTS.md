@@ -605,7 +605,9 @@ never with final text, which the host treats as unfinished work:
   compare the headings, the values around it and the task. When they settle that it is the
   requested field, use it; when they do not, ask the user one focused question with
   `request_input`. Report absence only when the evidence shows the site lacks it, and never
-  invent a value or substitute a different field.
+  invent a value or substitute a different field. After a verified write, when the site does
+  not offer one output the request asks for, the writes skill's ask whether to publish without
+  it comes first.
 - `site_declined`: the site offers what the task needs but declines this example's own facts,
   such as an applicant it will not quote. Name the reason the site gave in `explanation`.
 - `site_unavailable`: the site is temporarily down for the failing input: its own pages show a

@@ -258,6 +258,27 @@ it("keeps a repair's caller-input question to invalid or real", async () => {
   );
 });
 
+// A write build's one real write was done and confirmed when it found the site offers one of the
+// requested outputs by email only. Outside maintenance nothing allowed a question about publishing
+// without it, so the build ended blocked with no tool. After a confirmed write only, that question
+// is the caller's decision.
+it("allows asking, after a confirmed write, whether to publish without an output the site does not offer", async () => {
+  const requests = scripted([[message({ outcome: "allow_business", rationale: "Allowed." })]]);
+  await Effect.runPromise(
+    makeGuardian(makeOpenAIReviewer("{{ tenant_policy_config }}", false, native)).reviewQuestion(
+      pending,
+      question,
+      unreadable,
+    ),
+  );
+  expect(reviewPolicyOf(requests[0])).toContain(
+    "a field made optional or nullable, widened to another shape, or removed.",
+  );
+  expect(reviewPolicyOf(requests[0])).toContain(
+    "\n- after a confirmed write (an act execution in trusted_execution_context.executions whose effect is verified), a question asking whether to publish without one requested output the site does not offer is the caller's decision; prefer allow.\n- question_review.blockedOutcome is true:",
+  );
+});
+
 // The question review rejected the read-or-write question as redundant when trusted intent already
 // leaned read-only, and objected to the answer labels the host sets itself, so the build could
 // never get past its required first question.
