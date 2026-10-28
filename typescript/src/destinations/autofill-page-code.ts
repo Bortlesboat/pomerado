@@ -1060,7 +1060,9 @@ for (let index = 0; index < selectors.length; index++) {
   foundFields.push(foundField);
 }
 const foundSubmit =
-  (submitKey !== null && foundFields.length > 0) || submitSelector === null ? null : await locate(submitSelector);
+  (submitKey !== null && foundFields.length > 0) || submitSelector === null
+    ? null
+    : await locate(submitSelector, undefined, foundFields);
 if (foundSubmit !== null && "error" in foundSubmit) {
   await checkReads(foundFields);
   return { ...foundSubmit, target: "submit", url: primary.url()${fill?.call.kind === "submit" ? ", document: await documentStart()" : ""} };
