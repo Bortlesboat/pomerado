@@ -321,7 +321,7 @@ const sharedGuidance: readonly (readonly [string, string])[] = [
   // when the build finds one, and neither skill names it as a gap.
   [
     "testing",
-    "Without a no-results answer, move on: it needs no `notTested` entry and no question;",
+    "Without a no-results answer, move on: it needs no `notTested` entry and no question.",
   ],
   ["publication", "and untested (such as a later page or another layout, live)."],
   // A part of the output that only some inputs show, such as a date a record has only in one
@@ -1231,7 +1231,10 @@ it("has a tool return the site's no to a valid request as a declared refusal quo
     "- A write that declines the task because the caller's own limit or the page's state rules it out, such as a total over the caller's price limit or a product number whose page names another item than the caller's: `InvalidInput`, thrown before the mark of the commit it guards (writes skill). Pass `field`, the input the caller would change, `kind`, the reason as a stable lowercase token such as `over_price_limit` or `item_mismatch`, and `available` where the page lists choices,",
   );
   expect(text("caller-input")).toContain(
-    "A write returns a refusal as its output only when its output schema declares that refusal, and only where the writes skill says one completes the run, such as before its first mark: any other output a write returns without `verified()` reports a possible change. - When the site itself says no to a valid request, such as an item out of stock or a variant it does not offer, prefer the writes skill's refusal quoting the site. - A write whose steps",
+    "A write returns a refusal as its output only when its output schema declares that refusal, and only where the writes skill says one completes the run, such as before its first mark: any other output a write returns without `verified()` reports a possible change.",
+  );
+  expect(text("caller-input")).toContain(
+    "- When the site itself says no to a valid request, such as an item out of stock or a variant it does not offer, prefer the writes skill's refusal quoting the site. - A write whose steps",
   );
   expect(text("caller-input")).toContain(
     "(writes skill). - A read whose site says no to the whole request, such as a product it no longer sells, prefers returning that no as a declared refusal with `site_message` over throwing (writes skill). - A write that declines",
@@ -1286,17 +1289,17 @@ it("renders the pinned standalone authoring", async () => {
       .filter(([path]) => path !== "reference/publication-review.md")
       .map(([path, text]) => [sha256(text), `workspace/${path}`]),
   ]).toStrictEqual([
-    ["5f3af5401fa484e56cd4eaeca41da8ba04cb9ded455ffc46263e659a05e2d54e", "core"],
+    ["eb74a211ed72773dc87d3da192c75849901b0e6d3b409cf9c7a760e4e6328da4", "core"],
     ["933e2daac360d31beeeb2a8aeabcf22ca8512cc0272f321b047106f4a2055ab3", "search"],
-    ["cec5bca01bf057a95faaab07e25c02e3d0b9329e66d6df97b6744f81ab421bf7", "auth"],
-    ["ad5b4f8391094f6d7c8ff4a480b071bb298807da9523971e0aaf7d719f152664", "testing"],
+    ["930550863b9f83e98719b77bc149b20e70b526a88a16dd758d44ab20d048d8cb", "auth"],
+    ["6e0abc8df202c1b26c29e5db48b23b0aaa2fa7dcb514d01250a7361a99543d35", "testing"],
     ["2b559ad88157f28be2a054787f4c736cf192bb825760bdf3050c01a59d060ba8", "pagination"],
-    ["4d05ffc26a395fafb591bb8ac593b79ae7450f21f26ac8709cbbe543fc2453df", "forms"],
-    ["60d94f1bc738726cfd31a34cd99b390e8ff7fcc9b6012d917061330c257ad22d", "writes"],
+    ["0f45b38331f51d0d503a26806d8a96b545a6dd4ca03eddce2c585debf2c569a2", "forms"],
+    ["ecaf28ded2af41284590a1d5de734e1a6679533ffbcecf764b08d2cdde41aad4", "writes"],
     ["d06f650fc09f74d3711e043da2303de97ced42c9ff2541d48ec28cd7e686519d", "cart"],
-    ["14ec800f1f19a16e1a94c11e8a4e869e798bf597d86cd2369a51d32d66c9bc94", "caller-input"],
+    ["b6dd72d69c30ac9a1818ac1baeae48e701cd318f04d11e04ef8c03d812b91a16", "caller-input"],
     ["fb7cd6b0929612a94dd6e0a3c54fa42e102ada77ccd83059fe818a01d8307cf0", "publication"],
-    ["a319737c69647bb215186a1ab88fb61edfff11c6cc6cec6fb582b490d1bae10a", "workspace/AGENTS.md"],
+    ["5a640cd05ced1ac6f5dd8772257593ae52233529934c317b9a11878f45e3cb5d", "workspace/AGENTS.md"],
     ["9501ae9c273d5d4db8976a544879f7aee44212c8a616b00e74263dcd3c593035", "workspace/README.md"],
   ]);
 });
@@ -1417,7 +1420,7 @@ it("renders the search URL fast path only when a host turns it on", async () => 
     [sha256(on.agents), "workspace/AGENTS.md"],
   ]).toStrictEqual([
     ["0386d3e23fb8cd652f7c64320b940b6a61c7ed9fb3315579fe5521c835789b42", "search"],
-    ["d10403f4fe86cdbe179b2ef53376a14c053fdbe7d151b31fb18018843b1141d5", "workspace/AGENTS.md"],
+    ["b803f4be43f079b28fd6c0dd5bee1e7594dbb6f6e96d1dc87ab7ebfe1adde765", "workspace/AGENTS.md"],
   ]);
   expect(on.digests.filter(([, name]) => name !== "search")).toStrictEqual(
     off.digests.filter(([, name]) => name !== "search"),

@@ -234,7 +234,7 @@ it("allows a blocked report that names the caller input at fault and why", async
     ),
   );
   expect(reviewPolicyOf(requests[0])).toContain(
-    'or when it asks the user for anything; the agent then revises or withdraws it. A report that starts "Caller input error:" is allowed when it names the input value at fault and why the site cannot fulfil it, in the site\'s own words where the site showed any. Saying what kind of value would work, such as a future date or a neighborhood the site lists, is part of that reason, not a request to the user. The rules below apply to questions, not to this report.\n',
+    'or when it asks the user for anything; the agent then revises or withdraws it. A report that starts "Caller input error:" is allowed when it names the input value at fault and why the site cannot fulfil it, in the site\'s own words where the site showed any. Saying what kind of value would work, such as a future date or a neighborhood the site lists, is part of that reason, not a request to the user.',
   );
 });
 

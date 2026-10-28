@@ -565,6 +565,69 @@ test("a field that hands its focus to another element is refused, naming that el
   expect(received).toEqual([]);
 });
 
+// Six one-digit boxes that still hold the digits of a code the site refused. The widget takes
+// digits in order: a box that takes the focus hands it to the first empty box, or to the last box
+// when every box holds one, and Delete empties a box and moves back one.
+const refusedCode = "135791";
+const freshCode = "246802";
+const heldBoxes = `${[...refusedCode]
+  .map(
+    (digit, at) =>
+      `<input id="box-${at + 1}" name="d${at + 1}" class="box" maxlength="1" inputmode="numeric" aria-label="Digit ${at + 1}" value="${digit}">`,
+  )
+  .join("")}
+<script>
+const boxes = [...document.querySelectorAll(".box")];
+const next = () => boxes.find((box) => box.value === "") ?? boxes[boxes.length - 1];
+boxes.forEach((box, at) => {
+  box.addEventListener("focus", () => {
+    if (next() !== box) next().focus();
+  });
+  box.addEventListener("input", () => {
+    if (box.value !== "") next().focus();
+  });
+  box.addEventListener("keydown", (event) => {
+    if (event.key !== "Delete" && event.key !== "Backspace") return;
+    event.preventDefault();
+    box.value = "";
+    boxes[Math.max(at - 1, 0)].focus();
+  });
+});
+</script>`;
+
+test("code boxes that still hold a refused code are emptied first, so the fresh code goes into every box", async ({
+  page,
+}) => {
+  const received = await serve(page, heldBoxes);
+  const step: AutofillStep = {
+    fields: [1, 2, 3, 4, 5, 6].map((box) => ({ selector: `#box-${box}`, slot: "code" as const })),
+    submit: 'button:text-is("Sign in")',
+  };
+  const host = await hostPage(page);
+  const inspection = await Effect.runPromise(
+    inspectAutofillStep({ step, page: host, siteOrigin: site, authenticationOrigins: [] }),
+  );
+  if ("outcome" in inspection) throw new Error(`Fixture inspection refused: ${inspection.reason}`);
+  const { keyboard } = await hostKeyboard(page);
+  const report = await Effect.runPromise(
+    fillAutofillStep({
+      step,
+      values: [...freshCode],
+      inspection,
+      page: host,
+      keyboard,
+      settleMs: 500,
+    }),
+  );
+  expect(report).toMatchObject({
+    outcome: "filled",
+    fields: step.fields.map(() => ({ slot: "code", status: "filled" })),
+    submit: "clicked",
+  });
+  const sent = received.map((form) => step.fields.map((_, at) => form.get(`d${at + 1}`)).join(""));
+  expect(sent).toEqual([freshCode]);
+});
+
 // Chromium establishes real child targets; the provider fixture must retain their opener identity.
 for (const state of ["authorized", "ambiguous", "replaced", "closed"] as const) {
   test(`the isolated host preserves ${state} authentication popup authority`, async ({ page }) => {

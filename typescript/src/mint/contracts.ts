@@ -1332,6 +1332,10 @@ export type PublicationRequest = typeof PublicationRequest.Type;
  *   revision or its words (`citesConfirmedUpdate`), such as a stop condition the owner picked that
  *   the build then met. The explanation says what the caller should supply or change. Optional:
  *   no host has to handle it until its core reports it.
+ * - `agent_declined`: the minter itself declined the requested task under its own usage policy,
+ *   and no change it could ask for would make it build it. It needs no refusal on record, and
+ *   Guardian reviews its explanation like any blocked ending. Never a site's, Guardian's or the
+ *   owner's refusal. Optional: no host has to handle it until its core reports it.
  * The host refuses each ending without its basis on record. A `policy` report whose only basis is
  * the owner's no or an unanswered question ends as `owner_declined` or `question_unanswered`. A
  * target on another registrable domain is never a reason by itself: Guardian reviews such work.
@@ -1348,6 +1352,7 @@ export const BuildBlocked = Schema.Struct({
     "owner_ended",
     "host_refused",
     "caller_input",
+    "agent_declined",
   ),
   explanation: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(blockedExplanationLimit)),
 });
@@ -1372,6 +1377,7 @@ export const BlockedReport = Schema.Struct({
     "owner_ended",
     "host_refused",
     "caller_input",
+    "agent_declined",
     "host_unavailable",
   ),
   explanation: BuildBlocked.fields.explanation,
@@ -1591,7 +1597,7 @@ export type PublicationDenial = typeof PublicationDenial.Type;
  * - `owner_declined`: the owner said no to a step the build needs.
  * - `owner_ended`: the owner chose in an answer to end the build.
  * - `site_lacks_capability`, `site_declined`, `site_unavailable`, `policy`, `host_refused`,
- *   `caller_input`: the minter's blocked ending of the same name.
+ *   `caller_input`, `agent_declined`: the minter's blocked ending of the same name.
  * - `host_unavailable`: the host, not the task, ended the build, such as when Guardian twice returned
  *   no outcome its review allows (`InvalidOutcome`).
  */
@@ -1610,6 +1616,7 @@ export const mintStopReasons = [
   "policy",
   "host_refused",
   "caller_input",
+  "agent_declined",
   "host_unavailable",
 ] as const;
 export const MintStopReason = Schema.Literal(...mintStopReasons);

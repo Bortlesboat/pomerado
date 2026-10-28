@@ -423,19 +423,26 @@ test("a one-box code screen with no button that takes its box away as a submit c
   await expect(page.locator("#account")).toBeVisible();
 });
 
-/** The host's calls, its first submit call failing as a call that never reached the page does. */
+/**
+ * The host's calls, its first submit call that may click failing as a call that never reached the
+ * page does. A look, which clicks nothing, goes through. `submits` counts both.
+ */
 const firstSubmitFails =
   (submits: { count: number }) =>
-  (host: AutofillPage): AutofillPage => ({
-    ...host,
-    execute: (script, timeout) => {
-      if (!script.includes("guardCall")) return host.execute(script, timeout);
-      submits.count++;
-      return submits.count === 1
-        ? Effect.fail(new Error("Browser call failed"))
-        : host.execute(script, timeout);
-    },
-  });
+  (host: AutofillPage): AutofillPage => {
+    let failed = false;
+    return {
+      ...host,
+      execute: (script, timeout) => {
+        if (!script.includes("guardCall")) return host.execute(script, timeout);
+        submits.count++;
+        if (failed || script.includes("const looking = true;"))
+          return host.execute(script, timeout);
+        failed = true;
+        return Effect.fail(new Error("Browser call failed"));
+      },
+    };
+  };
 
 test("a widget with no button whose submit call fails while the page stays as it was reports the failed call", async ({
   page,

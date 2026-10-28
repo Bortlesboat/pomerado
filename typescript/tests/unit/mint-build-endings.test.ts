@@ -369,6 +369,36 @@ it.each([
   },
 );
 
+// A minter that declined the task under its own usage policy had no ending the host would take:
+// policy needs a refusal on record, so the build looped and ended without a reason. It ends as
+// agent_declined, with no refusal on record, once Guardian allows the explanation.
+it("ends a build its minter declined itself as agent_declined, while policy still needs a refusal", async () => {
+  const explanation = "The build agent declined to build the part of this request that orders it.";
+  const reviewed: unknown[] = [];
+  const f = await fixture(
+    (_request, index) =>
+      [
+        call("report_blocked", { reason: "policy", explanation }, "policy"),
+        call("report_blocked", { reason: "agent_declined", explanation }, "declined"),
+      ][index] ?? prose("Stopping."),
+    {
+      reviewQuestion: (_candidate, context) =>
+        Effect.sync(() => {
+          reviewed.push(context?.blockedOutcome);
+          return { outcome: "allow_business" as const, rationale: "Plain." };
+        }),
+    },
+  );
+  const outcome = await f.run();
+  expect(lastResult(f.requests[1])).toContain("policy_not_refused");
+  expect(outcome).toMatchObject({
+    build: "incomplete",
+    blocked: { reason: "agent_declined", explanation },
+    stopReason: "agent_declined",
+  });
+  expect(reviewed).toEqual([true]);
+});
+
 const finishBuild = {
   entrypoint: "src/tool.ts",
   executionId: "execution_one",

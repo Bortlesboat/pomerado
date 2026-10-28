@@ -84,7 +84,14 @@ export {
 export type { ListOutput, ListReader, ListSegment, ListStart } from "../runtime/list-page.js";
 export { pagedListReader, paginationCode } from "./pagination.js";
 export type { PagedListOptions, PagerMechanism, PagerRow, PagerSegment } from "./pagination.js";
-export { FileInput, FileOutput, FileRefused, defaultFileLimits } from "../runtime/files.js";
+export {
+  FileInput,
+  FileOutput,
+  FileRefused,
+  SiteFileLimits,
+  defaultFileLimits,
+  fileInputWithin,
+} from "../runtime/files.js";
 export type { FileObject, FileLimits, PlacedFile, ScriptFiles } from "../runtime/files.js";
 export type { FormControlShape } from "./form-controls.js";
 export type {
@@ -125,6 +132,19 @@ export {
   readText,
   requestPastChallenge,
 } from "../runtime/http-operation.js";
+export {
+  batchFetchCode,
+  batchRead,
+  batchReadConcurrency,
+  batchReadDefaults,
+} from "../runtime/batch-read.js";
+export type {
+  BatchClock,
+  BatchReadItem,
+  BatchReadOptions,
+  BatchReadRequest,
+  BatchReadResult,
+} from "../runtime/batch-read.js";
 export {
   EmbeddedJsonFailure,
   embeddedJson,

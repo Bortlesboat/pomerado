@@ -8,13 +8,15 @@ export const statementSha256 = createHash("sha256").update(statement).digest("he
 
 /**
  * A site with a file input that uploads the chosen file and shows what the server received (its
- * name, size and sha256), and a link that downloads a statement. `received` lists each upload.
- * Its `/drop` page uploads a file the moment its input holds one; with `frame`, the main page
+ * name, size and sha256), and a link that downloads a statement. `received` lists each upload,
+ * and `requested` the path of every request the site answered. Its `/drop` page uploads a file the moment its input holds one; with `frame`, the main page
  * embeds that address in an iframe.
  */
 export const startFileSite = async (options: { readonly frame?: string } = {}) => {
   const received: { readonly name: string; readonly size: number; readonly sha256: string }[] = [];
+  const requested: string[] = [];
   const server = createServer((request, response) => {
+    requested.push(new URL(request.url ?? "/", "http://fixture").pathname);
     const chunks: Buffer[] = [];
     request.on("data", (chunk: Buffer) => chunks.push(chunk));
     request.on("end", () => {
@@ -73,6 +75,7 @@ document.getElementById("upload").addEventListener("click", async () => {
   return {
     url: `http://127.0.0.1:${address.port}/`,
     received,
+    requested,
     close: () =>
       new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),

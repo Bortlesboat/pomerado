@@ -120,7 +120,7 @@ export const submissionGuardCode = `(field, { key, call, actions, match, submit,
     // entry in it.
     const noOpScript = ${noOpScriptCode};
     const refused = ({ method, action }, held) =>
-      method === "get" && held && !(guard.scriptSubmit && noOpScript(action))
+      method === "get" && held && !(guard.scriptSubmit && noOpScript(action, true))
         ? "method"
         : method !== "dialog" && inUrl(action)
           ? "action"

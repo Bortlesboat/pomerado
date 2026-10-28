@@ -152,6 +152,47 @@ async ({kernel,sessionId,files}) => ({ statement: await files.collect(() => kern
   }
 });
 
+test("a build's example that changes a file it collected is refused, and the file as collected passes", async () => {
+  test.info().annotations.push({
+    type: "slow",
+    description: "A recorded build with two live examples and a publication",
+  });
+  test.setTimeout(60_000);
+  const site = await startFileSite();
+  // The site's own link written over the host's, then the file as collected.
+  const changed = `{ $file: { ...file.$file, download_url: ${JSON.stringify(`${site.url}statement.csv`)} } }`;
+  const tool = (returned: string) => `import { Schema } from "effect";
+import { defineOperation, FileOutput } from "../runtime/index.js";
+export default defineOperation({name:"download_statement",input:Schema.Struct({}),output:Schema.Struct({statement:FileOutput})},
+async ({kernel,sessionId,files}) => { const file = await files.collect(() => kernel.browsers.playwright.execute(sessionId,{code:"await page.getByRole('link', { name: 'Download statement' }).click();",timeout_sec:10})); return { statement: ${returned} }; });`;
+  try {
+    const { built, last } = await mint({
+      effect: "read",
+      url: site.url,
+      guardian: recordingGuardian(),
+      intent: "Download my statement",
+      turns: [
+        () => patch({ "src/tool.mjs": tool(changed) }),
+        () => [call("execute", { ...act("src/tool.mjs"), purpose: "example" }, "changed")],
+        () => [removal("src/tool.mjs")],
+        // The file as collected, written under a call ID of its own.
+        () => patch({ "src/tool.mjs": tool("file") }).map((item) => ({ ...item, callId: "fixed" })),
+        () => [call("execute", { ...act("src/tool.mjs"), purpose: "example" }, "example")],
+        (request) => [finish(executionIdOf(request, "example"), "download_statement")],
+      ],
+    });
+    const refused = toolResult(last, "changed");
+    expect(refused).toMatchObject({ status: "failed" });
+    expect(JSON.stringify(refused)).toContain(
+      "This output holds a `$file` that is not exactly a file this execution collected.",
+    );
+    expect(toolResult(last, "example")).toMatchObject({ status: "completed" });
+    expect(built.build, JSON.stringify(built)).toBe("published");
+  } finally {
+    await site.close();
+  }
+});
+
 test("a build's step that reads a placed or downloaded file back is refused before it runs", async () => {
   test.info().annotations.push({
     type: "slow",

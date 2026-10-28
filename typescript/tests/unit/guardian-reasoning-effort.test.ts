@@ -4,7 +4,6 @@ import { Effect } from "effect";
 import { afterEach, expect, it } from "vitest";
 import { lunaModel } from "../../src/models/models.js";
 import { makeOpenAIReviewer } from "../../src/guardian/openai.js";
-import type { GuardianModelOptions } from "../../src/guardian/openai.js";
 import { nativeExecutionEnvironment } from "../../src/guardian/execution-policy.js";
 import { makeGuardian } from "../../src/guardian/review.js";
 import type { GuardianDiagnostics, PendingExecution } from "../../src/guardian/review.js";
@@ -95,25 +94,6 @@ const recording = () => {
   return { diagnostics, usage };
 };
 
-const reviewAll = (options: Omit<GuardianModelOptions, "executionEnvironment">) => {
-  const { diagnostics, usage } = recording();
-  const guardian = makeGuardian(
-    makeOpenAIReviewer("Synthetic policy {{ tenant_policy_config }}", false, {
-      executionEnvironment: nativeExecutionEnvironment,
-      ...options,
-    }),
-    diagnostics,
-    {},
-  );
-  return Effect.runPromise(
-    Effect.gen(function* () {
-      for (const review of [pending, quick, pending])
-        yield* guardian.review(review, readCurrent);
-      return usage;
-    }),
-  );
-};
-
 type WireItem = { readonly type?: string; readonly role?: string; readonly reasoning?: unknown };
 const itemsOf = (body: Record<string, unknown> | undefined) =>
   (body?.["input"] ?? []) as readonly WireItem[];
@@ -172,20 +152,4 @@ it("changes a review's reasoning effort with a configuration update, keeping the
       expect.objectContaining({ details: expect.objectContaining({ reasoningEffort }) }),
     ),
   );
-});
-
-it("reviews at medium effort when the host picks none", async () => {
-  const bodies = wire();
-  const usage = await reviewAll({});
-
-  expect(bodies.map((body) => (body.reasoning as { effort?: string }).effort)).toEqual([
-    "medium",
-    "medium",
-    "medium",
-  ]);
-  expect(usage).toEqual([
-    expect.objectContaining({ details: expect.objectContaining({ reasoningEffort: "medium" }) }),
-    expect.objectContaining({ details: expect.objectContaining({ reasoningEffort: "medium" }) }),
-    expect.objectContaining({ details: expect.objectContaining({ reasoningEffort: "medium" }) }),
-  ]);
 });

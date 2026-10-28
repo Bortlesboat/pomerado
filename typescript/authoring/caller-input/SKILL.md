@@ -103,6 +103,10 @@ separately are both applied as given, even when they're far apart.
      its output only when its output schema declares that refusal, and only where the writes
      skill says one completes the run, such as before its first mark: any other output a write
      returns without `verified()` reports a possible change.
+   - A read whose search for the caller's name or place opens one record whose name or place
+     differs from the caller's value: prefer `InvalidInput`, with `field` that input and
+     `available` that record as the input takes it, over `InputNotApplied`, which is for a valid
+     value the page didn't apply. Don't return that record's data as the caller's answer.
    - When the site itself says no to a valid request, such as an item out of stock or a variant
      it does not offer, prefer the writes skill's refusal quoting the site.
    - A write whose steps may have changed the site and then failed or could not confirm the
@@ -143,8 +147,9 @@ Try first. Ask only for what the page or the caller uniquely knows at that point
   offers alternatives for: prefer not starting a refusal of either with "Caller input error:"
   (above). A day or option the page greys out, with or without a reason, is not ambiguous and
   never a question (core skill, "Configure, then read");
-- a code the site sends to confirm a protected action after sign-in, such as a confirmation code
-  by text or email, never a code that is part of signing in (auth skill);
+- a code that is not part of signing in (auth skill): another code the site sends to confirm a
+  protected action after sign-in, or a code the site sends during a write, signed out too
+  (writes skill), such as a confirmation code by text or email;
 - a fact only the caller has that the site now asks for.
 
 Never ask for a value the request, the input or an earlier answer already supplied, a private
@@ -193,9 +198,10 @@ already asked for, or to solve a CAPTCHA.
      at least one unless `minSelections` says otherwise, at most the options offered.
    - `{ type: "text", prompt, maxLength? }`: free text.
    - `{ type: "confirm", prompt, followUp? }`: yes or no, returned as `{ confirmed }`.
-   - `{ type: "secret", secretKind, prompt, maxLength? }`: a code the site sent to
-     confirm an action after sign-in (`one_time_code`; a code that is part of signing
-     in is a `code` field of the `authenticate` step, never a question), an
+   - `{ type: "secret", secretKind, prompt, maxLength? }`: a code the site sent that is
+     not part of signing in, to confirm an action after sign-in or during a write, signed
+     out too (`one_time_code`; a code that is part of signing in is a `code` field of the
+     `authenticate` step, never a question), an
      authenticator code (`totp`, which a saved login's TOTP fills without asking) or
      other private text (`private_text`). It stays out of traces,
      logs and the minting model. A secret you ask during the build with `request_input`
