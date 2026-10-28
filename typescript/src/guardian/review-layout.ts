@@ -118,6 +118,7 @@ export const guardianDecisionFormat: AgentOutputType = {
           { type: "null" },
           {
             type: "array",
+            maxItems: 64,
             items: {
               type: "object",
               properties: {

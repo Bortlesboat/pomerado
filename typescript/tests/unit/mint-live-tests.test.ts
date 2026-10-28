@@ -1463,6 +1463,35 @@ it("tells the publication review when no live test batch can run again", async (
   expect((await record(false)).noRunsLeft).toBeUndefined();
 });
 
+// Once time runs out, the review keeps each gap a note; the batch cap's narrowing rule must not
+// turn those gaps back into findings.
+it("leaves noRunsLeft out once the attempt ran out of time for live tests", async () => {
+  const stopped = { status: "inconclusive" as const, reason: "deadline" as const };
+  const { host } = liveTestHost({ "sort-price": stopped, nothing: emptyResults });
+  const published = publications();
+  const f = await fixture(
+    (_request, index) =>
+      [
+        call("live_tests", runAll, "run"),
+        call("execute", example, "example"),
+        call("finish_build", finish, "finish"),
+      ][index] ?? prose(),
+    {
+      liveTests: host,
+      deadline: Deadline.after(5 * 60_000),
+      reviewAndExecute: completedExample,
+      publish: published.publish,
+    },
+    read,
+  );
+  const root = (f.workspace as unknown as { root: string }).root;
+  await writeWorkspace(root, { "src/tool.ts": toolSource, "test/cases.json": JSON.stringify(cases) });
+  await f.run();
+  const record = published.seen[0]?.liveTests as { noRunsLeft?: boolean; outOfTime?: boolean };
+  expect(record.outOfTime).toBe(true);
+  expect(record.noRunsLeft).toBeUndefined();
+});
+
 it("never counts a case the site blocked on the browser's egress against the tool", async () => {
   const { host, batches } = liveTestHost({ "sort-price": { status: "inconclusive", reason: "site_block" } });
   const file = withPassing(cases, 1);

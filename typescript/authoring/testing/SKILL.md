@@ -1,9 +1,9 @@
 ---
 name: testing
-description: Design and run a few combined live test cases for a read. A read signed out runs a handful; a signed-in read runs four inputs at most. A write skips this skill and proves its tool with one run.
+description: Design and run combined live test cases for a read. A read signed out runs a wide, varied first batch of about 10 to 20; a signed-in read runs four inputs at most. A write skips this skill and proves its tool with one run.
 ---
 
-# Test a read with a few combined cases
+# Test a read with combined live cases
 
 This skill is for reads. A write does the original task: it proves its tool with its act session
 (writes skill), designs no tests, runs no live test and builds no offline test suite<!-- pomerado:section testing.write-http-check -->. It still checks its
@@ -15,8 +15,8 @@ expecting `invalid_input`, with `purpose` naming the capture of the site's not-f
 that runs it does so on the composed script with every commit mark settled, so it stops before
 any save; other hosts ignore it. A
 read proves its operation with its example, run again after each fix as the core skill says, then tests what the example did not
-exercise with a few live cases, each designed to cover as much as it can. A read signed out runs a
-handful (below). A signed-in read runs at most four distinct inputs beyond its example
+exercise with live cases, each designed to cover as much as it can. A read signed out runs a
+wide, varied first batch (below). A signed-in read runs at most four distinct inputs beyond its example
 (Signed-in reads, below). Report what
 no run exercised as untested in `coverage`. The scope follows what the tool is now: a read that
 becomes a write mid-build, a repair included, stops testing from then on; a read that signs in
@@ -44,8 +44,8 @@ Design it as soon as you know the page and its inputs, and run it once the examp
   filter. A status that only some of those rows have, a date range that leaves out one row's
   date, a price ceiling below one row's price and above another's, a category the page lists
   beside others. A value every example row already satisfies proves nothing: a tool that ignores
-  that filter passes anyway. Never a person's, account's or record's name, number, code or
-  email, which Guardian refuses as a private identifier: list such a filter under `notTested`
+  that filter passes anyway. Never a person's or account's name, number, code or email, or a private record's, such
+  as an order number, which Guardian refuses as a private identifier: list such a filter under `notTested`
   unless the caller's own input supplied its value.
 - Expect `result`, and say in `purpose`, for each input, the row field that shows it applied and
   an example row it excludes. After it runs, read its full output (`live_tests` action `plan`,
@@ -82,16 +82,19 @@ second no-results case and no edge cases.<!-- pomerado:section testing.signed-in
 the host's record of the cases you ran signed in, judges a failing case as a bug, and treats
 what you did not test as disclosure, not a gap. Then go on at "Run and fix the cases", below.
 
-## A read signed out: a handful of cases
+## A read signed out: a wide first batch
 
 Where the host offers `live_tests`, the host runs a read signed out's cases for you in
 parallel. Testing is your job, not the caller's: never wait to be told to try another record, retailer or value.
 
 Design the tests yourself. You saw the site: its controls, the values it offers and the ways its
 pages differ. Choose the cases that would show the tool works for callers other than this one,
-not mechanical variations of the example's input, and make each case cover as much as it can.
-Start as soon as you know the page and its inputs, and refine the cases once the example passes;
-run no batch before then. Aim for a handful of cases, not dozens:
+not mechanical variations of the example's input. Start as soon as you know the page and its
+inputs, and refine the cases once the example passes; run no batch before then. Make the first
+batch wide and varied, about 10 to 20 cases. Test rounds are few, and a narrow batch shows
+problems one at a time, such as a format, then a closed record, then another layout, each costing
+a fix and a full rerun. The host runs a batch on several browsers at once, so more cases cost
+little time. Root some cases in the inputs and some in your own code, as below. Start with:
 - the combined case above, with page two in it, and its second case where needed;
 - the example's own input once more, which a host with several browsers runs cold, first on a
   new browser with an empty profile: the proof that the tool works for a caller the site
@@ -109,19 +112,37 @@ run no batch before then. Aim for a handful of cases, not dozens:
   no-results case expects `result`, sets `noMatch: true` and returns the count or total as 0:
   prefer an input the site matches nothing for, and name in its `purpose` the capture where the
   site applied that input and showed zero. Without a no-results answer, move on: it needs no
-  `notTested` entry and no question;
-- for a free-text input, one case with a value the example used written another way, such as in
-  other case or with other spacing, punctuation or accents;
-- another case only where a different page structure or a real variant needs one, and each such
-  case sets as many inputs as still return rows: another retailer, store or seller; another
-  category; a record whose page is laid out differently (a single option, grouped options, a
-  multi-item page, sold out); for other reads, another route, date range or region, or a
-  document or order page of another kind; a location or other tailoring input the site won't
-  apply (`result`, with the applied value beside the requested one and the site's message, never
-  presented as the requested one's results); an option the page lists but greys out, such as a
-  sold-out size, which a read returns as unavailable data. Find them on the site, in a listing
-  or picker you opened; never invent them. Prefer trying other records as one batch of live
-  cases rather than one probe at a time, so they're reviewed together.
+  `notTested` entry and no question.
+
+Then cover each item below, in its own case or merged into one above where they fit together, or
+say under `notTested` why it does not apply to this tool:
+- each kind of query the request or the tool's description names, such as a search by name, by
+  category or by identifier: a search by the exact name or code of something the site lists
+  publicly, such as a product, a place or a book's ISBN, finds that item;
+- many results with the next page, and a query with a single result;
+- a closed, sold-out or unavailable record, returned as such, never as available, when the site
+  readily offers one that a quick search or browse finds. If none turns up reasonably, drop this case
+  and say why under `notTested`; never keep hunting for one, and never let its absence stop the build;
+- a boundary value: the earliest or latest date the site offers, or the lowest or highest count
+  or price it takes;
+- a value other than the default for each control;
+- a second store, seller or region, each such case setting as many inputs as still return rows;
+- for a free-text input, a value the example used written another way, such as in other case or
+  with other spacing, punctuation, accents or another language's characters;
+- for a details or lookup tool, several records that differ in kind and layout, not variants of
+  the example: a single option, grouped options, a multi-item page, a document or order page of
+  another kind;
+- for other reads, another route or date range; a location or other tailoring input the site
+  won't apply (`result`, with the applied value beside the requested one and the site's message,
+  never presented as the requested one's results); an option the page lists but greys out, such
+  as a sold-out size, which a read returns as unavailable data.
+
+Find each value on the site, in a listing or picker you opened; never invent it. Then read your
+own script and add a case for each branch no case above runs, so every branch runs at least once.
+A branch is a path the code takes only sometimes: a fallback when the first selector or request
+finds nothing, an optional dialog or banner it closes, a field it reads only on some pages, a
+retry. A script that reads a sale price when a sale badge shows, and the regular price otherwise,
+needs one case with each. Name the branch in the case's `purpose`.
 
 A blank or over-long value of a free-text input needs no live case: the input schema refuses it
 before the site is touched, so bound every free-text input there, non-empty and with a
@@ -135,9 +156,9 @@ offers, need no case or `notTested` entry of their own unless one opens a page w
 structure (other fields or sections), never one that only reorders or filters the same rows.
 Whatever you saw this site could break on while exploring, such as a panel that loads late, a
 pop-up, a layout that changes with the number of results or a value written differently on
-another page, belongs in the cases above rather than in cases of its own.
+another page, belongs in the cases above.
 
-Write them in `test/cases.json`:
+Write them in `test/cases.json`, as in these four of a first batch:
 
 ```json
 {
@@ -162,7 +183,8 @@ input that tailors the answer and that the site won't apply expects `result`, la
 applied value. Apart from a made-up value in the no-results
 case, use real values the site offers, which you saw while
 exploring: listed options, places, dates, counts, records and retailers the site lists. Never use
-a person's, account's or record's name, number or code, and never the caller's own values beyond
+a person's or account's name, number or code, or a private record's, such as an order number,
+and never the caller's own values beyond
 the example's input. List under `notTested` anything the tool claims that you chose not to test,
 with why. A choice the request, the caller or the owner declined is not part of the tool (core
 skill), so it is never tested.

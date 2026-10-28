@@ -11,7 +11,7 @@ script from a reset start by running its example until it works (re-running a re
 example is normal); resolve its missing choices with reads when possible. A write build
 does the caller's requested task once, live (in as many write steps as it takes), then
 composes its script from what happened (the `writes` skill). A read tests what its example
-did not exercise with a few combined live cases (the `testing` skill). A write proves its tool
+did not exercise with combined live cases, a wide, varied batch when signed out (the `testing` skill). A write proves its tool
 with its act session; it never reads
 the `testing` skill or designs further tests<!-- pomerado:section core.write-http-check -->.
 That forbids running the write again or testing it live, not writing checks: a write's script
@@ -99,6 +99,12 @@ answers `{ success, result, error, stderr }`. Throw
   their one `waitForRows` or `waitForValues` after the last change, which passes at once on a
   settled page.
 - `waitForOutcome` already waited for its answer, so prefer no extra wait for that same answer after it.
+- A step that changes the site's own setting, such as a store, location, currency or language,
+  often reloads the same URL or redraws the page after the site saves it, and the element the next
+  step uses may already show on the old page, where `waitForOutcome` counts it once unchanged for
+  2 s. Prefer naming an outcome only the new page shows: `{ url: page.url() }`, which after an
+  `action` counts only once the page navigated, beside the new setting shown outside its dialog.
+  Then look the next element up again before typing.
 - Check the null case if possible. Make sure the tool handles a lookup or filter that matches
   nothing.
 - Start a response wait in the same call as the click that causes it: name the response as a
@@ -356,8 +362,10 @@ exception: it is optional unless the task can't run without it (below).
   booleans named as statements (`refundable`, not `is_refundable_flag`); lists named in the
   plural; and the unit in the field name or its description (`duration_minutes`). Convert
   between these and the site's own formats in code. The output check flags a date or timestamp
-  not in the form its field declares (`format_mismatch`) and one value in two letter cases
-  across a list (`case_variant`).
+  not in the form its field declares, a value in another notation than its description names
+  and a currency that is not an ISO 4217 code (`format_mismatch`), a field whose description
+  promises such a notation that no `pattern` holds (`unheld_format`), and one value in two
+  letter cases across a list (`case_variant`).
 - When `reference/site-tools.json` exists, you can view the site's other tools. Read
   `reference/site-tools/README.md` first: it indexes them, one folder each, with each tool's
   effect, sign-in and a short description. Then read the folders you need: each holds a
@@ -648,9 +656,11 @@ the request is better served as two tools, a search and a details read by identi
 `readList`, not inside the list reader (pagination skill). When a call needs many independent
 lookups or detail reads, such as one for each returned row, prefer running them in parallel
 batches over one after another, such as the site's own data request for each row sent together
-in one `evaluate`. Send no more at once than the build showed the site handling without refusing
-or challenging, and fewer, spaced out, where it refused or challenged; a block at run time still
-fails the call, as the 429 rule above says.
+in one `evaluate` with the runtime's `batchFetch` (paste `batchFetchCode`), or with `batchRead`
+in an HTTP version. They start at 4 at once, send more after clean batches, halve on a 429 or 503
+and stop at a block. Send no more at once than the build showed the site handling without
+refusing or challenging (their `max`), and fewer, spaced out, where it refused or challenged; a
+block at run time still fails the call, as the 429 rule above says.
 Prefer the page's own structured data, its embedded JSON or the data response it renders from,
 to its rendered cards when it holds the same fields for the same records, and check on the
 example that it matches what the page shows. Embedded JSON holds the page as first rendered:

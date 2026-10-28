@@ -68,7 +68,7 @@ the source files, never captures.
   input, required where the request needs it, and publication decodes that input and returns a
   key the schema lacks as an `example_input` input feedback. An optional input plus a declared
   question is only for a value the request leaves open.
-- `live_tests` runs a read's live tests when the host offers it: the few combined cases you
+- `live_tests` runs a read's live tests when the host offers it: the combined cases you
   design in `test/cases.json` from what you saw on the site, and every result, run in batches on
   reset pages, on `src/tool.mjs` and on `src/tool-http.mjs`, each version keeping its own
   results. A read signed out's run in parallel, at least one case cold where the host has
@@ -312,8 +312,9 @@ or removing it or marking it untested, ask with `request_input` and set its `fin
 finding's `id`, so Guardian reviews the question against the finding.
 
 When Guardian sends a question back with `question_rejected`, reword it as the rationale says and
-ask again. Drop it only when the result's `questionNeeded` is false, or the rationale says plainly
-that no question is needed.
+ask again once, with the same question ids. Drop it when the result's `questionNeeded` is false,
+when the rationale says plainly that no question is needed, or when Guardian sends the reworded
+question back too.
 
 When nobody answers before the question expires, `request_input` returns `no_answer`. Decide
 how to go on without it: continue with a sensible default and list it in `finish_build`
@@ -569,7 +570,7 @@ during exploration too, not only in the published tool. A filter the site does n
 part of the read.
 
 Testing a read signed out is your job, never the caller's (.agents/testing/SKILL.md). It designs
-a handful of combined cases from what it saw on the site and
+a wide, varied first batch of about 10 to 20 cases from what it saw on the site and its own code, and
 runs them in parallel batches<!-- pomerado:section agents.http-cases -->. Finish in this order: your last edit, every case again on each version you ship, then
 the example last, before `finish_build`. A signed-in read tests four distinct inputs at most. A
 write's act session is the one run that proves the tool: it designs no tests and runs no live

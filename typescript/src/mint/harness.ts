@@ -73,6 +73,7 @@ import {
   publicationRefusalUnfixable,
   type PublicationFinding,
   type ResponseRuling,
+  hostRecordedEvidencePath,
 } from "../guardian/review-contracts.js";
 import { publicationFindingId } from "../guardian/publication.js";
 import {
@@ -559,7 +560,7 @@ const refusalRecovery = (reason: string | undefined, write: boolean): Publicatio
  * Guardian denial's instruction.
  */
 const findingAnswerInstruction =
-  " When you hold a finding wrong, or no longer applying, under the review's rules, answer it instead of resubmitting unchanged: call finish_build again with findingResponses naming its id, a short response and the evidence that shows it, a live test caseId or a file the review reads, such as a capture. Guardian rules on each answer in the next review. An answer never stands in for a live run or capture a finding asks for.";
+  " When you hold a finding wrong, or no longer applying, under the review's rules, answer it instead of resubmitting unchanged: call finish_build again with findingResponses naming its id, a short response and the evidence that shows it, a live test caseId or a capture the host recorded, never a file you wrote. Guardian rules on each answer in the next review. An answer never stands in for a live run or capture a finding asks for.";
 /** A refusal the harness makes before publication runs, as its decision. */
 const hostRefusalDecision = (
   reason: string,
@@ -1139,6 +1140,11 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
        * question's id, once asked: an id names one review, so an answer under it binds to that one.
        */
       const confirmAsks = new Map<string, string>();
+      /**
+       * The ids of questions Guardian already sent back once for other words. Each is asked again
+       * at most once: after a second rewording, the minter goes on without it.
+       */
+      const rewordedQuestions = new Set<string>();
       /**
        * Whether the owner's latest request_input kept an answer Guardian reads, with no other call
        * through the turn's actions since: what `owner_ended` stands on. A secret or sign-in answer
@@ -4636,7 +4642,7 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
               cases.length === 0
                 ? signedIn()
                   ? signedInPlanInstruction
-                  : `Design a handful of cases in ${liveTestCasesPath} from what you saw on the site, as the testing skill says: one case that sets together every input the example left unset, the example's input once more, no results, the next page, and another case only where a different layout or real variant needs it. Then call live_tests with action run.`
+                  : `Design a wide, varied first batch of about 10 to 20 cases in ${liveTestCasesPath} from what you saw on the site and your own code, as the testing skill says: one case that sets together every input the example left unset, the example's input once more, no results, the next page, then each kind of query the tool names, a single result, a closed or sold-out record when the site readily offers one, boundary values, a second store or region, other layouts and records of other kinds, and a case for each branch of your code no other case runs. Then call live_tests with action run.`
                 : cases.every((testCase) => testCase.status === "pass")
                   ? "Every case passes on the current source. Check what the outputs mean (filters applied to every item, rows each filter excludes gone, page two holding new rows, the order, the applied location), add a case for anything the tool claims that no case tests yet, then make your last edit, run every case again, run the example last and call finish_build."
                   : `Fix the code for each failing case at its frame. Fix everything this batch revealed before you run again, then rerun the failing cases and every case the fixes can touch, together in one batch named in cases, on each version you ship whose source the fixes changed. Add a case for anything the tool claims that no case tests yet, then, after your last edit, run every case once with cases null. Publication review reads ${liveTestsEvidencePath}, the host's record of these results on the source you publish, against what the tool claims.`,
@@ -5104,9 +5110,10 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                 ...(yield* inputSchemaOf(httpEntrypoint)),
               });
           }
-          // Whether any batch could still run, as publication's own check reads it.
+          // Whether the host's batch cap, not time, leaves no batch to run: once time ran out, the
+          // review keeps each gap a note instead.
           const runsLeft =
-            !liveTestsOutOfTime &&
+            liveTestsOutOfTime ||
             (yield* liveTestBatchFits(
               dependencies.liveTests,
               (yield* liveTestDeadline).deadlineAt,
@@ -5826,6 +5833,28 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                   userInputRequired: false,
                   instruction:
                     "Not published and not reviewed: each findingResponses entry must name, once, the id of a finding in Guardian's latest publication denial; answerable lists them. Remove or correct the others and call finish_build again.",
+                  executionContext: yield* executionContext(),
+                });
+              }
+              // Only the host's own record shows a finding wrong: a file the minter wrote is no
+              // evidence, so an answer citing one is refused before review.
+              const unrecorded = (proposed.findingResponses ?? []).flatMap(({ evidence }) =>
+                evidence?.path === undefined || hostRecordedEvidencePath(evidence.path)
+                  ? []
+                  : [evidence.path],
+              );
+              if (unrecorded.length > 0) {
+                const reason = "finding_evidence_unrecorded";
+                pendingDecision = hostRefusalDecision(reason, evidence.executionId, write);
+                yield* diagnose({ phase: "publication", code: "PublicationUnavailable", reason });
+                return JSON.stringify({
+                  status: "not_published",
+                  code: "PublicationUnavailable",
+                  reason,
+                  unrecorded: [...new Set(unrecorded)],
+                  userInputRequired: false,
+                  instruction:
+                    "Not published and not reviewed: a findingResponses evidence path must name a capture the host recorded, under captures/, or publication/tests.json, never a file you wrote. Cite a live test caseId or such a capture, or leave the evidence out, and call finish_build again.",
                   executionContext: yield* executionContext(),
                 });
               }
@@ -6818,10 +6847,17 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                 // The read-or-write question is the turn's only move, so it is never withdrawn.
                 // Any other is asked again in other words unless Guardian found none needed.
                 if (review.outcome !== "allow_business") {
-                  const questionNeeded =
-                    effectQuestion || review.label === undefined || review.label === "other"
-                      ? undefined
-                      : !questionNotNeededLabels.includes(review.label);
+                  // A question already reworded once is not asked again in other words.
+                  const ids = submitted.questions.map((question) => question.id);
+                  const rewordedBefore = ids.some((id) => rewordedQuestions.has(id));
+                  if (!effectQuestion) for (const id of ids) rewordedQuestions.add(id);
+                  const questionNeeded = effectQuestion
+                    ? undefined
+                    : rewordedBefore
+                      ? false
+                      : review.label === undefined || review.label === "other"
+                        ? undefined
+                        : !questionNotNeededLabels.includes(review.label);
                   return JSON.stringify({
                     status: "question_rejected",
                     rationale,
@@ -6830,10 +6866,12 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                     instruction: effectQuestion
                       ? "Reword the question using the rationale and call request_input again. This read-or-write question is required, and no other tool opens until the person answers it. The host sets its two answer labels, so change only the prompt."
                       : questionNeeded === true
-                        ? "Guardian wants this question in other words: the owner still needs to answer it. Call request_input again with the question reworded as the rationale says; do not drop it. The reworded question is reviewed again."
-                        : questionNeeded === false
-                          ? "Guardian found no question needed: the rationale says why, such as an answer you already have or the default the step keeps. Continue without asking it, and do not ask it again in other words."
-                          : "Call request_input again with the question reworded as the rationale says; the reworded question is reviewed again. Continue without it only when the rationale says plainly that no question is needed, such as for a value you were already given or that the site shows.",
+                        ? "Guardian wants this question in other words: the owner still needs to answer it. Call request_input again, once, with the question reworded as the rationale says and the same question ids; do not drop it. The reworded question is reviewed again."
+                        : rewordedBefore
+                          ? "Guardian sent this question back again after it was reworded once, so it is not asked again. Go on without asking it, using what the rationale says, and do not ask it again in other words."
+                          : questionNeeded === false
+                            ? "Guardian found no question needed: the rationale says why, such as an answer you already have or the default the step keeps. Continue without asking it, and do not ask it again in other words."
+                            : "Call request_input again, once, with the question reworded as the rationale says and the same question ids; the reworded question is reviewed again. Continue without it only when the rationale says plainly that no question is needed, such as for a value you were already given or that the site shows.",
                   });
                 }
               }

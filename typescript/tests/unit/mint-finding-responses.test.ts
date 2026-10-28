@@ -219,3 +219,39 @@ it("refuses an answer sent again unchanged after the review ruled on it", async 
   expect(reviews).toBe(2);
   expect(resultOf(f.requests[4], "unchanged")).toMatchObject({ reason: "unchanged_since_denial" });
 });
+
+// An answer could cite a file the minter wrote itself as its evidence. Only the host's own record,
+// a capture or publication/tests.json, can show a finding wrong.
+it("refuses an answer whose evidence is a file the minter wrote, before review", async () => {
+  const submitted: PublicationRequest[] = [];
+  const written = { ...ratingAnswer, evidence: { path: "src/notes.json" } };
+  const escaping = { ...ratingAnswer, evidence: { path: "captures/../src/notes.json" } };
+  const captured = { ...ratingAnswer, evidence: { path: "captures/item/capture.json" } };
+  const f = await fixture(
+    (_request, index) =>
+      [
+        example,
+        call("finish_build", finishBuild, "first"),
+        call("finish_build", { ...finishBuild, findingResponses: [written] }, "written"),
+        call("finish_build", { ...finishBuild, findingResponses: [escaping] }, "escaping"),
+        call("finish_build", { ...finishBuild, findingResponses: [captured] }, "captured"),
+      ][index] ?? prose("Stopping."),
+    {
+      publish: (request) =>
+        Effect.suspend(() => {
+          submitted.push(request);
+          return Effect.fail(denial([nullableRating]));
+        }),
+    },
+  );
+  await f.run();
+  expect(resultOf(f.requests[3], "written")).toMatchObject({
+    reason: "finding_evidence_unrecorded",
+    unrecorded: ["src/notes.json"],
+  });
+  expect(resultOf(f.requests[4], "escaping")).toMatchObject({
+    reason: "finding_evidence_unrecorded",
+  });
+  // A capture the host recorded reaches the review.
+  expect(submitted.map((request) => request.findingResponses)).toEqual([undefined, [captured]]);
+});

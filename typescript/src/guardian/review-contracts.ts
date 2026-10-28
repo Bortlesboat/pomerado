@@ -1,3 +1,4 @@
+import { posix } from "node:path";
 import { Schema } from "effect";
 
 /**
@@ -240,13 +241,28 @@ export const FindingResponse = Schema.Struct({
       ),
       path: Schema.optional(
         Schema.String.pipe(Schema.minLength(1), Schema.maxLength(300)).annotations({
-          description: "A file the review can read that shows it, such as a capture",
+          description:
+            "A capture the host recorded, under captures/, or publication/tests.json, that shows it; never a file you wrote",
         }),
       ),
     }),
   ),
 });
 export type FindingResponse = typeof FindingResponse.Type;
+
+/**
+ * Whether an answer's evidence path names a file the host recorded, never one the minter wrote: a
+ * capture under `captures/`, or the host's live test record. A path that leaves its directory
+ * names neither.
+ */
+export const hostRecordedEvidencePath = (path: string): boolean => {
+  const normal = posix.normalize(path);
+  return (
+    normal === liveTestsRecordPath ||
+    (normal.startsWith("captures/") && normal.length > "captures/".length)
+  );
+};
+const liveTestsRecordPath = "publication/tests.json";
 
 /** The characters Guardian's reason for one ruling may hold; the host cuts a longer one. */
 export const rulingReasonLimit = 500;
