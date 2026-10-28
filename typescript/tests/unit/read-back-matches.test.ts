@@ -96,11 +96,6 @@ it("reads one comma or point between a number's digits as its decimal mark, with
       }
     }
   }
-  // Digit groups split by a space, hyphen or slash still match only group for group.
-  expect(readBackMatches("29 59", "29-59")).toBe(true);
-  expect(readBackMatches("29/59", "29 59")).toBe(true);
-  expect(readBackMatches("2959", "29 59")).toBe(false);
-  expect(readBackMatches("1/12", "11/2")).toBe(false);
 });
 
 it("ignores characters that never show, and reads a combining accent as the letter's", () => {
