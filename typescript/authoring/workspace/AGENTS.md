@@ -68,7 +68,7 @@ the source files, never captures.
   input, required where the request needs it, and publication decodes that input and returns a
   key the schema lacks as an `example_input` input feedback. An optional input plus a declared
   question is only for a value the request leaves open.
-- `live_tests` runs a read's live tests when the host offers it: the few combined cases you
+- `live_tests` runs a read's live tests when the host offers it: the combined cases you
   design in `test/cases.json` from what you saw on the site, and every result, run in batches on
   reset pages, on `src/tool.mjs` and on `src/tool-http.mjs`, each version keeping its own
   results. A read signed out's run in parallel, at least one case cold where the host has

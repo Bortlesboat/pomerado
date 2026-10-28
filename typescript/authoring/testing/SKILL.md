@@ -44,8 +44,8 @@ Design it as soon as you know the page and its inputs, and run it once the examp
   filter. A status that only some of those rows have, a date range that leaves out one row's
   date, a price ceiling below one row's price and above another's, a category the page lists
   beside others. A value every example row already satisfies proves nothing: a tool that ignores
-  that filter passes anyway. Never a person's, account's or record's name, number, code or
-  email, which Guardian refuses as a private identifier: list such a filter under `notTested`
+  that filter passes anyway. Never a person's or account's name, number, code or email, or a private record's, such
+  as an order number, which Guardian refuses as a private identifier: list such a filter under `notTested`
   unless the caller's own input supplied its value.
 - Expect `result`, and say in `purpose`, for each input, the row field that shows it applied and
   an example row it excludes. After it runs, read its full output (`live_tests` action `plan`,

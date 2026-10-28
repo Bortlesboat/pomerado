@@ -11,7 +11,7 @@ script from a reset start by running its example until it works (re-running a re
 example is normal); resolve its missing choices with reads when possible. A write build
 does the caller's requested task once, live (in as many write steps as it takes), then
 composes its script from what happened (the `writes` skill). A read tests what its example
-did not exercise with a few combined live cases (the `testing` skill). A write proves its tool
+did not exercise with combined live cases, a wide, varied batch when signed out (the `testing` skill). A write proves its tool
 with its act session; it never reads
 the `testing` skill or designs further tests<!-- pomerado:section core.write-http-check -->.
 That forbids running the write again or testing it live, not writing checks: a write's script
