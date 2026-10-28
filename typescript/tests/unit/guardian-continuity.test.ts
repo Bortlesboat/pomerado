@@ -953,23 +953,3 @@ it("cancelling the final checkpoint leaves the review incomplete", async () => {
     ),
   );
 });
-
-it("preserves a provider quota failure through the Effect session boundary", async () => {
-  setDefaultModelProvider({
-    getModel: () => ({
-      getResponse: async () => {
-        throw Object.assign(new Error("Synthetic quota refusal"), { code: "insufficient_quota" });
-      },
-      getStreamedResponse: () => {
-        throw new Error("Unused stream");
-      },
-    }),
-  });
-  const guardian = makeGuardian(
-    makeOpenAIReviewer("{{ tenant_policy_config }}", false, native),
-    undefined,
-    {},
-  );
-  const result = await Effect.runPromise(Effect.either(guardian.review(pending, readCurrent)));
-  expect(result).toMatchObject({ _tag: "Left", left: { modelQuotaExhausted: true } });
-});

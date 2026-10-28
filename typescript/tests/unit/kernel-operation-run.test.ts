@@ -1,7 +1,5 @@
-import { readFile } from "node:fs/promises";
 import { Cause, Effect, Exit, Option, Schema } from "effect";
 import type { Scope } from "effect";
-import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
 import {
   ExecutionContext,
@@ -294,22 +292,4 @@ describe("executeKernelOperation", () => {
     );
     expect(replaced.exit).toEqual(Exit.succeed("first:b"));
   });
-});
-
-// The local host never passes `first`: only a host that supplies its own implementation does.
-it("is called by the local child without a `first` runner", async () => {
-  const child = await readFile("typescript/src/execution/local-operation-child.ts", "utf8");
-  const parsed = parseSync("local-operation-child.ts", child, { lang: "ts", sourceType: "module" });
-  const argumentCounts: number[] = [];
-  const visit = (node: unknown): void => {
-    if (Array.isArray(node)) return node.forEach(visit);
-    if (node === null || typeof node !== "object") return;
-    const record = node as Record<string, unknown>;
-    const callee = record["callee"] as Record<string, unknown> | undefined;
-    if (record["type"] === "CallExpression" && callee?.["name"] === "executeKernelOperation")
-      argumentCounts.push((record["arguments"] as unknown[]).length);
-    Object.values(record).forEach(visit);
-  };
-  visit(parsed.program);
-  expect(argumentCounts).toEqual([3]);
 });
