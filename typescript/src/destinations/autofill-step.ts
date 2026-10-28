@@ -516,6 +516,17 @@ export type AutofillStepReport =
       readonly clicked?: true;
       /** A `clicked` submit the host pressed from the keyboard: Enter on the submit itself. */
       readonly via?: "keyboard";
+      /**
+       * Host-only, on a `refused` submit of a step with a submit or a submit key whose every field
+       * takes a code: once the host typed every field, and before it clicked anything, the step's
+       * submit or a field went from the very document the host typed the last field in, and no
+       * new document replaced it through the host's looks, as a code screen that sends itself on
+       * its last digit and closes in place does. Every field is `filled`. The page may have sent
+       * the code, which no new document proves, so only the sign-in's own check can tell: a run's
+       * replay counts the step as `page` once the recipe's marker shows, and keeps the refusal
+       * otherwise (`runReplayStep`).
+       */
+      readonly closedInPlace?: true;
       /** What caught a `blocked` click, by its markup's own names, never its text or a value. */
       readonly blockedBy?: typeof CoveringElement.Type;
       /** The primary page after the submit settled, byte-exact like every URL. */

@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Clock, Duration, Effect } from "effect";
 import type { YieldableError } from "effect/Cause";
 import { timeExecutionStage } from "./sign-in-telemetry.js";
 import { logicalRejectedField, rejectableSlot } from "./autofill-rejection.js";
@@ -6,6 +6,7 @@ import type {
   AutofillInspection,
   AutofillSlot,
   AutofillStep,
+  AutofillStepReport,
 } from "../destinations/autofill-step.js";
 import { maySend } from "../destinations/autofill-refusal.js";
 import {
@@ -89,8 +90,43 @@ const retryRefusal = <E extends YieldableError, V extends string, L extends Auto
 };
 
 /**
+ * A code screen whose fill found it closed in place once every field was typed (`closedInPlace`),
+ * as one that sends itself on its last digit and takes its submit away does, sent its code only
+ * when the sign-in's own check says so: the replay reads the recipe's marker on the page
+ * (`checkHere`) until it shows, for up to a screen's wait (`stepWaitMs`), as its marker wait after
+ * the screens does. Once it shows, the step counts as sent by the page (`page`), as one whose page
+ * loaded a new document does, and the replay's checks go on as after such a step. Otherwise the
+ * fill's refusal stands, as it did before the host looked.
+ */
+const closedInPlace = <E extends YieldableError, V extends string, L extends AutofillLogin>(
+  session: ReplaySession<E, V, L>,
+  stepReport: AutofillStepReport,
+) =>
+  Effect.gen(function* () {
+    if (
+      stepReport.outcome !== "filled" ||
+      stepReport.closedInPlace !== true ||
+      stepReport.submit !== "refused" ||
+      stepReport.clicked === true ||
+      stepReport.fields.some((field) => field.status !== "filled")
+    )
+      return stepReport;
+    const until = (yield* Clock.currentTimeMillis) + session.timing.stepWaitMs;
+    let signedIn = (yield* session.checkHere).signedIn;
+    while (!signedIn && (yield* Clock.currentTimeMillis) < until) {
+      yield* Effect.sleep(Duration.millis(session.timing.pollMs));
+      signedIn = (yield* session.checkHere).signedIn;
+    }
+    yield* session.input.emit({ stage: "closed_in_place", signedIn });
+    if (!signedIn) return stepReport;
+    const { closedInPlace: _closed, failureDetail: _refused, ...sent } = stepReport;
+    return { ...sent, submit: "page" } satisfies AutofillStepReport;
+  });
+
+/**
  * One observed screen: admitted by the host, filled and submitted. Why it did not complete, or
- * undefined. `planned` is the recorded screen's `refills`.
+ * undefined. `planned` is the recorded screen's `refills`. A code screen that closed in place
+ * counts as sent only once the marker shows (`closedInPlace`).
  */
 export const runReplayStep = <E extends YieldableError, V extends string, L extends AutofillLogin>(
   session: ReplaySession<E, V, L>,
@@ -165,7 +201,10 @@ export const runReplayStep = <E extends YieldableError, V extends string, L exte
       registeredSecretIn(input.broker, { component: "worker", correlation: input.correlation }),
     );
     session.firstCause.submitted();
-    const stepReport = yield* hooks.fill({ step, values: filled, inspection });
+    const stepReport = yield* closedInPlace(
+      session,
+      yield* hooks.fill({ step, values: filled, inspection }),
+    );
     yield* timeExecutionStage(
       input.latency,
       "autofill_settle",
