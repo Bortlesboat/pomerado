@@ -931,8 +931,13 @@ it("has a write ask once to publish without an output the site does not offer, a
     "After a verified write, if the site does not offer one output the request asks for, prefer asking the caller once with `request_input` whether to publish the tool with that output null and a reason field, rather than ending blocked; never invent the value.",
   );
   // The blocked ending for a capability the site lacks points to that ask first.
-  expect((texts.get("workspace/AGENTS.md") ?? "").replace(/\s+/g, " ")).toContain(
+  const guide = (texts.get("workspace/AGENTS.md") ?? "").replace(/\s+/g, " ");
+  expect(guide).toContain(
     "never invent a value or substitute a different field. After a verified write, when the site does not offer one output the request asks for, the writes skill's ask whether to publish without it comes first.",
+  );
+  // So does the rule that never offers to leave out an output the request names.
+  expect(guide).toContain(
+    "A field, input or output the request itself names is never such a capability: support it, or end with `report_blocked` saying why the site cannot; never offer to leave it out, except after a verified write, where the writes skill's ask whether to publish without it comes first.",
   );
 });
 
@@ -1291,7 +1296,7 @@ it("renders the pinned standalone authoring", async () => {
     ["d06f650fc09f74d3711e043da2303de97ced42c9ff2541d48ec28cd7e686519d", "cart"],
     ["14ec800f1f19a16e1a94c11e8a4e869e798bf597d86cd2369a51d32d66c9bc94", "caller-input"],
     ["fb7cd6b0929612a94dd6e0a3c54fa42e102ada77ccd83059fe818a01d8307cf0", "publication"],
-    ["871339318b34673250ee065020506b0a921320f7c5a1aced80a1a57b3a68d270", "workspace/AGENTS.md"],
+    ["aa7f6655fbcf5caa638dd99d8307095b1bc9bc859cc583bf81c2e9e5f410ff6a", "workspace/AGENTS.md"],
     ["9501ae9c273d5d4db8976a544879f7aee44212c8a616b00e74263dcd3c593035", "workspace/README.md"],
   ]);
 });
@@ -1412,7 +1417,7 @@ it("renders the search URL fast path only when a host turns it on", async () => 
     [sha256(on.agents), "workspace/AGENTS.md"],
   ]).toStrictEqual([
     ["0386d3e23fb8cd652f7c64320b940b6a61c7ed9fb3315579fe5521c835789b42", "search"],
-    ["aaa257f8017914f220f7833756ffa48c976ddedce8cd3827d1e48e7a24529cda", "workspace/AGENTS.md"],
+    ["797527740d38ad6e6e0cb1c4f58291ab0ed4a9622847cc05ffef5d4a9703659b", "workspace/AGENTS.md"],
   ]);
   expect(on.digests.filter(([, name]) => name !== "search")).toStrictEqual(
     off.digests.filter(([, name]) => name !== "search"),

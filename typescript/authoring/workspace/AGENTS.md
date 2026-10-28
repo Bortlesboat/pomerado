@@ -285,7 +285,8 @@ whose answers come back to you while this attempt continues, when:
    the first `act` step when you can. A review that offers refusal as an alternative fix is not
    the owner's choice. A field, input or output the request itself names is never such a
    capability: support it, or end with `report_blocked` saying why the site cannot; never offer
-   to leave it out.
+   to leave it out, except after a verified write, where the writes skill's ask whether to
+   publish without it comes first.
 
 When the owner decides only whether to go on as asked or stop, prefer a `confirm` question whose
 no stops the build over a stop option in a `choice` question, so you can end it as
