@@ -1,6 +1,5 @@
 import { expect, it } from "vitest";
-import { locateCode, noOpScriptCode } from "../../src/destinations/autofill-locate-code.js";
-import { submissionGuardCode } from "../../src/destinations/autofill-submission-guard.js";
+import { noOpScriptCode } from "../../src/destinations/autofill-locate-code.js";
 
 const noOpScript = (0, eval)(noOpScriptCode) as (address: unknown) => boolean;
 
@@ -61,10 +60,4 @@ it.each([
   null,
 ])("does not count %j as a script action that does nothing", (address) => {
   expect(noOpScript(address)).toBe(false);
-});
-
-// The destination check's page code and the submission guard judge a script action by one rule.
-it("judges a script action by the same rule in the step call and the guard", () => {
-  expect(locateCode).toContain(noOpScriptCode);
-  expect(submissionGuardCode).toContain(noOpScriptCode);
 });

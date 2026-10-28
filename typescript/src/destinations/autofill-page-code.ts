@@ -183,6 +183,13 @@ export type AutofillFillCall =
       readonly kind: "focus";
       readonly index: number;
       readonly bindingKey: string;
+      /**
+       * The step's code boxes, by field index, on the focus call of the row's first box: each one
+       * that holds something, as a refused code's digits may, is emptied first, last box first,
+       * with no focus and no key, so the page's own focus rules see an empty row before the host
+       * types the fresh code.
+       */
+      readonly emptyBoxes?: readonly number[];
     }
   | {
       readonly kind: "date";
@@ -294,6 +301,11 @@ if (
 // submit call compares against it with no address in its code.
 const typedAt = ${JSON.stringify(typedAt)};
 const readsOnly = ${JSON.stringify(call.kind === "submit")} && fields.length > 0 && submit === null;
+// A look clicks nothing, and the host takes one only before it clicked. codeLook: one at a step
+// whose every field takes a code, never on a click again (pressCovered), whose dismiss may have
+// emptied every box itself.
+const looking = ${JSON.stringify(call.kind === "submit" && call.look === true)};
+const codeLook = looking && ${JSON.stringify(call.kind === "submit" && call.pressCovered !== true)} && fields.length > 0 && codeSlots.every(Boolean);
 ${call.kind === "submit" ? pageSentCode : call.kind === "dismiss" ? "" : "await keep(typedAt, primary.url());"}
 for (const check of ${JSON.stringify(check)}) {
   // Its length only, never its value.
@@ -349,7 +361,10 @@ const codeBoxesHoldCode = (boxes: readonly number[]) =>
  * only, never a value; a field it cannot read fails the call, as the check's own read does there
  * (`readsOnly`). A step with a submit is the host's to click: a form that locks, moves or
  * redraws itself while it checks what was typed has not sent it, and the submit call waits on it
- * or refuses as before.
+ * or refuses as before. A code step's look before the host clicked (`codeLook`) is the exception:
+ * a code screen that locks or empties every box the host typed, with nothing clicked, took the code
+ * itself, as a widget with no submit does. Its address moving is still no send. A click again's
+ * look is no such exception, since the dismiss before it may have emptied every box itself.
  */
 const pageSentCode = `const originAndPath = (url) => {
   try {
@@ -363,13 +378,15 @@ if (readsOnly) {
   const typedPage = await kept(typedAt);
   if (typeof typedPage === "string" && originAndPath(typedPage) !== originAndPath(primary.url()))
     return { pageSent: true, url: primary.url() };
+}
+if (readsOnly || codeLook) {
   const fieldsDisabled = await Promise.all(
     fields.map(({ locator }) => locator.isDisabled({ timeout: 1000 }).catch(() => false)),
   );
   if (fieldsDisabled.every(Boolean)) return { pageSent: true, url: primary.url() };
 }
 const allEmptied = async () => {
-  if (fields.length < 2 || !readsOnly) return false;
+  if (fields.length < 2 || !(readsOnly || codeLook)) return false;
   for (const { locator } of fields) {
     const empty = await locator.evaluate(
       (element) => typeof element.value === "string" && element.value.length === 0,
@@ -657,6 +674,15 @@ const fillCallBody = (call: AutofillFillCall) => {
 const fieldLocated = located.fields[${call.index}];
 const question = fields[${call.index}].question;
 try {
+  // A row of code boxes that still holds a refused code is emptied first, last box first, by each
+  // input's own value setter and an input event: no focus and no key a widget moves the focus on.
+  // Lengths only, never a value.
+  for (const box of ${JSON.stringify([...(call.emptyBoxes ?? [])].reverse())})
+    await fields[box].locator.evaluate((element) => {
+      if (!(element instanceof HTMLInputElement) || element.value.length === 0) return;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(element, "");
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+    }, undefined, { timeout: ${elementReadMs} }, true);
   // Emptied only when it holds something: Playwright clears with a Delete key a page sees.
   if (await field.evaluate((element) => typeof element.value === "string" && element.value.length > 0, undefined, { timeout: ${elementReadMs} }))
     await field.fill("", { timeout: 5000 });

@@ -3,7 +3,7 @@ import { InputRequest } from "../runtime/input-request.js";
 import { DialogReport } from "../runtime/kernel-operation.js";
 import { maximumInputIssuePath, maximumInputIssues } from "../runtime/errors.js";
 import { ScriptQuestionDeclarations } from "../runtime/script-input.js";
-import { FileField, fileReferenceMaxLength } from "../runtime/files.js";
+import { FileField, fileReferenceMaxLength, SiteFileLimits } from "../runtime/files.js";
 import {
   maximumRefusalChoiceLength,
   maximumRefusalChoices,
@@ -132,13 +132,17 @@ export const LocalOperationMessage = Schema.Union(
   Schema.Struct({ kind: Schema.Literal("sign_in"), id: Id }),
   /** `fillCard`: the host types the card answers behind the handles into the named fields. */
   Schema.Struct({ kind: Schema.Literal("card_fill"), id: Id, step: ScriptCardFillRequest }),
-  /** `files.place`: the host puts the referenced file into the located file input. */
+  /**
+   * `files.place`: the host puts the referenced file into the located file input, within the
+   * site's limits when the script names them.
+   */
   Schema.Struct({
     kind: Schema.Literal("file_place"),
     id: Id,
     reference: Schema.String.pipe(Schema.maxLength(fileReferenceMaxLength)),
     field: FileField,
     timeoutSec: Schema.Int.pipe(Schema.between(1, 300)),
+    ...SiteFileLimits.fields,
   }),
   /** `files.collect`, before its trigger: the host starts capturing downloads. */
   Schema.Struct({ kind: Schema.Literal("file_arm"), id: Id }),

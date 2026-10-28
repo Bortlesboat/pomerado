@@ -919,6 +919,29 @@ it("has a write confirm from its first matching read-back, never from state befo
 });
 
 /*
+ * A write that issued a document confirmed it by reading it back, then found that the site sends
+ * one of the two requested files by email only and offers no way to fetch it. With every
+ * requested output required and blocked as the only ending for one the site lacks, the build
+ * ended with no tool although its one real write was done. After a verified write, it asks the
+ * caller once whether to publish with that output null and a reason, and never fills it in.
+ */
+it("has a write ask once to publish without an output the site does not offer, after its verified write", async () => {
+  const texts = await renderedTexts("typescript/authoring");
+  expect((texts.get("writes") ?? "").replace(/\s+/g, " ")).toContain(
+    "In a write build, after a verified write, if the site does not offer one output the request asks for, prefer asking the caller once with `request_input` whether to publish the tool with that output null and a reason field, rather than ending blocked; never invent the value.",
+  );
+  // The blocked ending for a capability the site lacks points to that ask first.
+  const guide = (texts.get("workspace/AGENTS.md") ?? "").replace(/\s+/g, " ");
+  expect(guide).toContain(
+    "never invent a value or substitute a different field. After a verified write, when the site does not offer one output the request asks for, the writes skill's ask whether to publish without it comes first.",
+  );
+  // So does the rule that never offers to leave out an output the request names.
+  expect(guide).toContain(
+    "A field, input or output the request itself names is never such a capability: support it, or end with `report_blocked` saying why the site cannot; never offer to leave it out, except one output the site does not offer, after a verified write, where the writes skill's ask whether to publish without it comes first.",
+  );
+});
+
+/*
  * A write marked opening a form and typing an address as commits, then waited only for the
  * address suggestions. For an address outside the area the site serves, the site showed a notice
  * instead, so the run timed out with two marks entered and reported a possible change when
@@ -1208,7 +1231,10 @@ it("has a tool return the site's no to a valid request as a declared refusal quo
     "- A write that declines the task because the caller's own limit or the page's state rules it out, such as a total over the caller's price limit or a product number whose page names another item than the caller's: `InvalidInput`, thrown before the mark of the commit it guards (writes skill). Pass `field`, the input the caller would change, `kind`, the reason as a stable lowercase token such as `over_price_limit` or `item_mismatch`, and `available` where the page lists choices,",
   );
   expect(text("caller-input")).toContain(
-    "A write returns a refusal as its output only when its output schema declares that refusal, and only where the writes skill says one completes the run, such as before its first mark: any other output a write returns without `verified()` reports a possible change. - When the site itself says no to a valid request, such as an item out of stock or a variant it does not offer, prefer the writes skill's refusal quoting the site. - A write whose steps",
+    "A write returns a refusal as its output only when its output schema declares that refusal, and only where the writes skill says one completes the run, such as before its first mark: any other output a write returns without `verified()` reports a possible change.",
+  );
+  expect(text("caller-input")).toContain(
+    "- When the site itself says no to a valid request, such as an item out of stock or a variant it does not offer, prefer the writes skill's refusal quoting the site. - A write whose steps",
   );
   expect(text("caller-input")).toContain(
     "(writes skill). - A read whose site says no to the whole request, such as a product it no longer sells, prefers returning that no as a declared refusal with `site_message` over throwing (writes skill). - A write that declines",
@@ -1263,17 +1289,17 @@ it("renders the pinned standalone authoring", async () => {
       .filter(([path]) => path !== "reference/publication-review.md")
       .map(([path, text]) => [sha256(text), `workspace/${path}`]),
   ]).toStrictEqual([
-    ["5f3af5401fa484e56cd4eaeca41da8ba04cb9ded455ffc46263e659a05e2d54e", "core"],
+    ["1c6fec0b5f838031caa2c13029a65d8b13bf89ff5b2fa0318042d36e153ee317", "core"],
     ["933e2daac360d31beeeb2a8aeabcf22ca8512cc0272f321b047106f4a2055ab3", "search"],
-    ["cec5bca01bf057a95faaab07e25c02e3d0b9329e66d6df97b6744f81ab421bf7", "auth"],
+    ["930550863b9f83e98719b77bc149b20e70b526a88a16dd758d44ab20d048d8cb", "auth"],
     ["ad5b4f8391094f6d7c8ff4a480b071bb298807da9523971e0aaf7d719f152664", "testing"],
     ["2b559ad88157f28be2a054787f4c736cf192bb825760bdf3050c01a59d060ba8", "pagination"],
-    ["4d05ffc26a395fafb591bb8ac593b79ae7450f21f26ac8709cbbe543fc2453df", "forms"],
-    ["ae84ba5cd3c71b639c886e82930f9c7f022b88583380ca208e13dd7788eb2170", "writes"],
+    ["0f45b38331f51d0d503a26806d8a96b545a6dd4ca03eddce2c585debf2c569a2", "forms"],
+    ["3a907b1f23f0f637f30adad9939751c9052a540fa182d14ed412bb071cac68d1", "writes"],
     ["d06f650fc09f74d3711e043da2303de97ced42c9ff2541d48ec28cd7e686519d", "cart"],
-    ["14ec800f1f19a16e1a94c11e8a4e869e798bf597d86cd2369a51d32d66c9bc94", "caller-input"],
+    ["b6dd72d69c30ac9a1818ac1baeae48e701cd318f04d11e04ef8c03d812b91a16", "caller-input"],
     ["04c6131eb7bc854b284e2ec03f366b8a2c2a76383a6b91b4a3d3c41548e0934f", "publication"],
-    ["e6a91d90cd515385aa8a7073a5435ac00a4f2dbaaa045cffd3b290e9b497dc91", "workspace/AGENTS.md"],
+    ["2aa706abc7901c4e32ab803355f828f4b383422ac3a56c3959bd7f906c136b32", "workspace/AGENTS.md"],
     ["9501ae9c273d5d4db8976a544879f7aee44212c8a616b00e74263dcd3c593035", "workspace/README.md"],
   ]);
 });
@@ -1394,7 +1420,7 @@ it("renders the search URL fast path only when a host turns it on", async () => 
     [sha256(on.agents), "workspace/AGENTS.md"],
   ]).toStrictEqual([
     ["0386d3e23fb8cd652f7c64320b940b6a61c7ed9fb3315579fe5521c835789b42", "search"],
-    ["8cdb4e10da001832e65d3d6693de61d85ddfcbcc0c78a4b87fa6d5f5766bb218", "workspace/AGENTS.md"],
+    ["878bdcfb464a8212767ba351343f754848b132ff638d7db4979e0281e253c048", "workspace/AGENTS.md"],
   ]);
   expect(on.digests.filter(([, name]) => name !== "search")).toStrictEqual(
     off.digests.filter(([, name]) => name !== "search"),

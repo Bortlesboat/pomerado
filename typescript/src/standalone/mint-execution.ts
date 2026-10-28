@@ -292,6 +292,14 @@ const actOutcome = (
   };
 };
 
+/**
+ * What a build step's failure says when its output held a `$file` that is not exactly a file the
+ * step collected, which the local operation refuses with the code `FileRefused`, as it refuses a
+ * run's result, so the minter fixes the output before it publishes.
+ */
+const uncollectedFileMessage =
+  "This output holds a `$file` that is not exactly a file this execution collected. Return each file as `files.collect` gave it, and put any other fact about the file in a separate field.";
+
 type Journal = Parameters<MintDependencies["reviewAndExecute"]>[2];
 interface ReceiptInput {
   readonly state: MintState;
@@ -369,7 +377,10 @@ const failedReceipt = (
         ? {}
         : { writePathRemaining: receipt.writePathRemaining }),
       observations: {
-        message: secrets.redact(failure.message),
+        message:
+          failure instanceof LocalOperationFailure && failure.code === "FileRefused"
+            ? uncollectedFileMessage
+            : secrets.redact(failure.message),
         ...(failure instanceof LocalOperationFailure
           ? {
               code: failure.code,
