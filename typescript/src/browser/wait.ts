@@ -606,9 +606,13 @@ const waitForOutcomeResult = async (outcomes, options = {}) => {
       // With the page unreadable, only the outcomes the page announced as events decide, in the
       // listed order.
       const blocked = events.dialogOpen() || (observations === undefined && events.anyHit());
+      // While a navigation the action set off is on its way, the elements shown are the old
+      // document's, about to be replaced: a locator or invalid fields count only on the new one.
+      const replacing = key !== undefined && events.navigating(state.actedAt);
       const shown = candidates.find((candidate) =>
         blocked ? ["response", "dialog", "popup"].includes(candidate.kind) && events.hit(candidate.name) !== undefined
-          : outcomeWaitShows(candidate, observations?.[candidate.name], state, stale, now));
+          : !(replacing && (candidate.kind === "locator" || candidate.kind === "invalid")) &&
+            outcomeWaitShows(candidate, observations?.[candidate.name], state, stale, now));
       if (shown !== undefined) {
         const observation = observations?.[shown.name];
         if (shown.kind === "locator" && observation.count > 1) {

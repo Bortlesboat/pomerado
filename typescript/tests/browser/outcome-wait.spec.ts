@@ -514,3 +514,75 @@ test("a tool whose outcome wait times out fails as a browser action timeout", as
     _tag: "OperationFailure",
   });
 });
+
+// A step that saves a site setting reloads the same URL once the site saved it, and the field the
+// next step types into shows on the page before and after the reload. Here the reload starts more
+// than a second after the click, so it is none of the click's own requests, just as a look has read
+// the field from before the click, unchanged, and that look is judged past the 1.1 s unchanged
+// window; the reloaded document comes back 200 ms later. The wait returns only once the reloaded page
+// shows the field, never while the old page that the reload replaces still shows it, where typing
+// is lost when the new page commits.
+test("a wait after an action that reloads the page returns the element on the reloaded page", async ({
+  page,
+}) => {
+  const origin = "https://shop.example.test";
+  let loads = 0;
+  await page.route(`${origin}/**`, async (route) => {
+    loads += 1;
+    if (loads > 1) await new Promise((resolve) => setTimeout(resolve, 200));
+    await route.fulfill({
+      contentType: "text/html",
+      body: `<input aria-label="Search" data-load="${loads}"><button type="button">Use this store</button>`,
+    });
+  });
+  await page.goto(`${origin}/`);
+  expect(
+    await call(
+      page,
+      `const search = page.getByRole("textbox", { name: "Search" });
+      let clickedAt;
+      let reloaded = false;
+      // Whether the main frame's reload is on its way, its old document still shown.
+      let replacing = false;
+      page.on("request", (request) => {
+        if (request.isNavigationRequest() && request.frame() === page.mainFrame()) replacing = true;
+      });
+      page.on("framenavigated", (frame) => {
+        if (frame === page.mainFrame()) replacing = false;
+      });
+      // The field as the wait reads it: the reload starts once a look's last read 1.02 s after the
+      // click has found the field from before it, and the look goes on 1.15 s after the click.
+      const field = {
+        count: () => search.count(),
+        filter: (options) => {
+          const visible = search.filter(options);
+          return {
+            count: () => visible.count(),
+            evaluateAll: async (...args) => {
+              const read = await visible.evaluateAll(...args);
+              if (clickedAt !== undefined && Date.now() - clickedAt >= 1020 && !reloaded) {
+                reloaded = true;
+                const started = page.waitForRequest((request) => request.isNavigationRequest());
+                await page.evaluate(() => setTimeout(() => location.reload(), 0));
+                await started;
+                await new Promise((resolve) => setTimeout(resolve, clickedAt + 1150 - Date.now()));
+              }
+              return read;
+            },
+          };
+        },
+      };
+      await waitForOutcome({ search: field }, {
+        action: async () => {
+          await page.getByRole("button", { name: "Use this store" }).click();
+          clickedAt = Date.now();
+        },
+        unchangedMs: 1100,
+        timeout: 5000,
+      });
+      // A keyboard typing now would go to whichever document shows.
+      const returnedWhileReplacing = replacing;
+      return { returnedWhileReplacing, load: await search.getAttribute("data-load") };`,
+    ),
+  ).toEqual({ result: { returnedWhileReplacing: false, load: "2" } });
+});
