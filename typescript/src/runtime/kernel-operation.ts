@@ -20,6 +20,7 @@ import { inspectSignInRejection } from "./sign-in-rejection.js";
 import {
   FileField,
   FileRefused,
+  SiteFileLimits,
   type FileChannel,
   type FileRefusalReason,
   type ScriptFiles,
@@ -385,7 +386,7 @@ const scriptFiles = (
     if (options.journal !== undefined) Effect.runSync(options.journal.enteringDispatch);
   };
   return {
-    place: async (reference, { field, timeoutSec }) => {
+    place: async (reference, { field, timeoutSec, maxBytes, extensions }) => {
       const files = channel();
       if (typeof reference !== "string")
         throw new OperationFailure("files.place takes the input's file reference", {
@@ -394,6 +395,16 @@ const scriptFiles = (
       // A field is data naming one input; anything else, such as page code, names none.
       if (Either.isLeft(Schema.decodeUnknownEither(FileField)(field)))
         throw fileFailure(new FileRefused({ reason: "field_not_found" }));
+      // The site's limits go to the host only when the script names them, and only as limits.
+      const limits = Schema.decodeUnknownEither(SiteFileLimits)({
+        ...(maxBytes === undefined ? {} : { maxBytes }),
+        ...(extensions === undefined ? {} : { extensions }),
+      });
+      if (Either.isLeft(limits))
+        throw new OperationFailure(
+          'files.place takes maxBytes as a positive whole number of bytes and extensions as file name endings such as ".pdf"',
+          { dispatch: "not_sent" },
+        );
       try {
         const placed = await settle(
           files.place({
@@ -402,6 +413,7 @@ const scriptFiles = (
             timeoutSec: kernelTimeoutSec(
               Math.min((timeoutSec ?? 30) * 1000, options.deadline.remainingMs()),
             ),
+            ...limits.right,
           }),
         );
         dispatched();

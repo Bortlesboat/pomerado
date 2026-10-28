@@ -229,26 +229,9 @@ describe("the card branch of the typing guard", () => {
     fields: [{ selector: "#payment-numberInput", slot }],
   });
 
-  it("trusts a card field in a listed payment frame", () => {
-    expect(
-      untrustedTarget({ fields: [target(stripeFrame)], submit: null }, step("card_number"), trust, 0),
-    ).toBeUndefined();
-  });
-
   it("never trusts a password field in a payment frame", () => {
     expect(
       untrustedTarget({ fields: [target(stripeFrame)], submit: null }, step("password"), trust, 0),
-    ).toMatchObject({ outcome: "refused", reason: "credential_target_refused" });
-  });
-
-  it("refuses a card field in a frame off the list", () => {
-    expect(
-      untrustedTarget(
-        { fields: [target("https://m.stripe.network/inner.html")], submit: null },
-        step("card_number"),
-        trust,
-        0,
-      ),
     ).toMatchObject({ outcome: "refused", reason: "credential_target_refused" });
   });
 

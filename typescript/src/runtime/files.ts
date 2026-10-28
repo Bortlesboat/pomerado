@@ -29,6 +29,43 @@ export const FileInput = Schema.String.pipe(
   jsonSchema: { format: fileFormat },
 });
 
+/** A file name ending a site takes, such as `.pdf` or `.tar.gz`. */
+const FileExtension = Schema.String.pipe(Schema.pattern(/^\.[A-Za-z0-9][A-Za-z0-9._+-]{0,30}$/u));
+
+/**
+ * The limits a site states for one file input, such as "PDF or Word, up to 5 MB": `maxBytes`, the
+ * most bytes the file may hold, and `extensions`, the name endings it takes, such as `.pdf`,
+ * compared without case. A tool declares them on its input with `fileInputWithin` and passes them
+ * to `files.place`. The host refuses a caller's file outside them as `InvalidInput`: when a run
+ * starts, before it signs in or opens a page, and again before it sets the input. The host's own
+ * caps and the input's `accept` still apply.
+ */
+export interface SiteFileLimits {
+  readonly maxBytes?: number;
+  readonly extensions?: readonly string[];
+}
+export const SiteFileLimits = Schema.Struct({
+  maxBytes: Schema.optionalWith(Schema.Int.pipe(Schema.positive()), { exact: true }),
+  extensions: Schema.optionalWith(
+    Schema.Array(FileExtension).pipe(Schema.minItems(1), Schema.maxItems(50)),
+    { exact: true },
+  ),
+});
+
+/**
+ * A caller's file input with the limits its site states. The operation's published input schema
+ * carries them beside `format: "file"` as `maxBytes` and `extensions`, which is how a host knows
+ * them before the run starts. Throws when the limits are not a positive whole number of bytes and
+ * name endings such as `.pdf`.
+ */
+export const fileInputWithin = (limits: SiteFileLimits) =>
+  FileInput.annotations({
+    jsonSchema: {
+      format: fileFormat,
+      ...Schema.decodeUnknownSync(SiteFileLimits)(limits, { onExcessProperty: "error" }),
+    },
+  });
+
 /** A file name as hosts report it: one path segment, no control characters. */
 export const FileName = Schema.String.pipe(
   Schema.minLength(1),
@@ -163,11 +200,13 @@ export interface FileChannel {
    * Puts the file `reference` names into the one file input `field` names, and reports what the
    * input now holds.
    */
-  readonly place: (request: {
-    readonly reference: string;
-    readonly field: FileField;
-    readonly timeoutSec: number;
-  }) => Effect.Effect<PlacedFile, FileRefused>;
+  readonly place: (
+    request: {
+      readonly reference: string;
+      readonly field: FileField;
+      readonly timeoutSec: number;
+    } & SiteFileLimits,
+  ) => Effect.Effect<PlacedFile, FileRefused>;
   /** Starts capturing downloads; the returned slot names this capture. */
   readonly arm: () => Effect.Effect<string, FileRefused>;
   /** Waits for the slot's first finished download and keeps it for the caller. */
@@ -187,12 +226,15 @@ export interface ScriptFiles {
    * input whose frame is on the tool's site and whose `accept` takes the file, and only then sets
    * it. It refuses a reference that is not one of this run's files, a file over its caps, bytes
    * that are not of the declared type, a program, and each failed check; a refusal the caller's
-   * file caused throws `InvalidInput`, any other `OperationFailure`. Choosing a file can start an
-   * upload, so a run that placed a file may have sent it. Never read a placed file back.
+   * file caused throws `InvalidInput`, any other `OperationFailure`. `maxBytes` and `extensions`,
+   * the limits the site states for this input (`SiteFileLimits`), make it refuse a file over that
+   * size (`too_large`) or with another name ending (`not_accepted`) the same way, before it sets
+   * the input. Choosing a file can start an upload, so a run that placed a file may have sent it.
+   * Never read a placed file back.
    */
   readonly place: (
     reference: string,
-    options: { readonly field: FileField; readonly timeoutSec?: number },
+    options: { readonly field: FileField; readonly timeoutSec?: number } & SiteFileLimits,
   ) => Promise<PlacedFile>;
   /**
    * Runs `trigger`, the script's own execute calls that make the page start one download (a

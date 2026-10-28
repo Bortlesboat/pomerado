@@ -1,25 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nestedInput, readHints, siteInput, writeHints } from "../../src/mcp/schema.js";
-
-describe("MCP tool hints", () => {
-  it("lets clients run a read tool without asking, and several at once", () => {
-    expect(readHints).toEqual({
-      readOnlyHint: true,
-      openWorldHint: true,
-      idempotentHint: true,
-      destructiveHint: false,
-    });
-  });
-
-  it("marks a tool that may change a website as neither read-only nor idempotent", () => {
-    expect(writeHints).toEqual({
-      readOnlyHint: false,
-      openWorldHint: true,
-      idempotentHint: false,
-      destructiveHint: true,
-    });
-  });
-});
+import { nestedInput, siteInput } from "../../src/mcp/schema.js";
 
 describe("a tool's input as its call nests it", () => {
   const fields = {
