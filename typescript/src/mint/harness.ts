@@ -166,6 +166,8 @@ import {
   questionOnlyWorkspace,
   relativeSourcePath,
   screenMintText,
+  skillPagePath,
+  skillReadLength,
 } from "./workspace.js";
 
 /**
@@ -5269,8 +5271,11 @@ export const runMint = (input: unknown): Effect.Effect<MintOutcome, MintFailure,
                   }
                   if (typeof result !== "string") throw new MintFailure({ code: "Unavailable" });
                   if (offset > result.length) throw new MintFailure({ code: "InvalidRequest" });
+                  // An installed skill's page reads whole from offset, up to its own cap, whatever
+                  // limit the model passed: a rule past a short limit is otherwise never read.
+                  const length = skillPagePath.test(relative) ? skillReadLength : limit;
                   const end =
-                    limit === undefined ? result.length : Math.min(result.length, offset + limit);
+                    length === undefined ? result.length : Math.min(result.length, offset + length);
                   return JSON.stringify({
                     kind: "untrusted_source",
                     path: relative,

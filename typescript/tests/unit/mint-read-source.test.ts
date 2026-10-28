@@ -3,7 +3,9 @@ import { join } from "node:path";
 import { Usage } from "@openai/agents";
 import type { ModelRequest, ModelResponse } from "@openai/agents";
 import { afterEach, expect, it } from "vitest";
+import type { MintDependencies } from "../../src/mint/contracts.js";
 import { makeOpenAIMinter } from "../../src/mint/openai.js";
+import { skillReadLength } from "../../src/mint/workspace.js";
 import type { ModelObserverFactory } from "../../src/models/model-observer.js";
 import { makeMintContinuationFixture, portableJobSession } from "../support/mint-fixtures.js";
 
@@ -95,10 +97,14 @@ const recordingObserver = (afterRead?: (readPath: string) => Promise<void>) => {
   return { tools, started, observerFactory };
 };
 
-/** Runs the scripted responses, then ends the attempt blocked, recording every model request. */
+/**
+ * Runs the scripted responses, then ends the attempt blocked, recording every model request. With
+ * `skills`, the workspace installs them instead of the fixture's one short skill.
+ */
 const scripted = async (
   responses: readonly ModelResponse[],
   afterRead?: (readPath: string) => Promise<void>,
+  skills?: MintDependencies["skills"],
 ) => {
   const sent: ModelRequest[] = [];
   const observer = recordingObserver(afterRead);
@@ -119,6 +125,7 @@ const scripted = async (
       {},
       { observerFactory: observer.observerFactory },
     ),
+    ...(skills === undefined ? {} : { skills }),
   });
   return {
     root: f.workspace.root,
@@ -322,4 +329,119 @@ it.each([
     code: "InvalidRequest",
   });
   expect(f.reads()).toEqual([]);
+});
+
+/** A skill page `length` UTF-16 code units long whose last rule sits at its very end. */
+const longSkill = (length: number) => {
+  const lastRule = "Last rule: publish through finish_build.";
+  const rules = "Follow this rule.\n".repeat(Math.ceil(length / 18));
+  return `${rules.slice(0, length - lastRule.length)}${lastRule}`;
+};
+
+it("reads an installed skill whole, whatever limit the model passes, up to its cap", async () => {
+  const core = longSkill(20_000);
+  const writes = longSkill(skillReadLength + 5_000);
+  const f = await scripted(
+    [
+      // The first read of a skill, with a limit far below the skill's length.
+      respond("read_source", { path: skill, offset: 0, limit: 8_000 }, "skill"),
+      respond(
+        "read_source",
+        {
+          path: null,
+          offset: null,
+          limit: null,
+          paths: [
+            // The same page under /workspace/, with no limit at all.
+            { path: "/workspace/.agents/core/SKILL.md", offset: null, limit: null },
+            // A skill over the cap reads up to the cap, and the rest from its nextOffset.
+            { path: ".agents/writes/SKILL.md", offset: 0, limit: 8_000 },
+            { path: ".agents/writes/SKILL.md", offset: skillReadLength, limit: 1 },
+          ],
+        },
+        "several",
+      ),
+    ],
+    undefined,
+    [
+      { name: "core", description: "Synthetic long contract", content: core },
+      { name: "writes", description: "Synthetic skill over the cap", content: writes },
+    ],
+  );
+  await f.run();
+  expect(toolResult(f.sent, "skill")).toEqual({
+    kind: "untrusted_source",
+    path: skill,
+    source: core,
+    offset: 0,
+    total: core.length,
+    offsetUnit: "UTF-16 code units",
+    nextOffset: null,
+  });
+  expect(toolResult(f.sent, "several")).toEqual({
+    kind: "untrusted_sources",
+    files: [
+      expect.objectContaining({ path: skill, source: core, nextOffset: null }),
+      expect.objectContaining({
+        path: ".agents/writes/SKILL.md",
+        source: writes.slice(0, skillReadLength),
+        offset: 0,
+        total: writes.length,
+        nextOffset: skillReadLength,
+      }),
+      expect.objectContaining({
+        path: ".agents/writes/SKILL.md",
+        source: writes.slice(skillReadLength),
+        offset: skillReadLength,
+        nextOffset: null,
+      }),
+    ],
+  });
+});
+
+it("keeps offset and limit for every file that is not an installed skill page", async () => {
+  const text = "y".repeat(20_000);
+  const f = await scripted([
+    respond(
+      "read_source",
+      {
+        path: null,
+        offset: null,
+        limit: null,
+        paths: [
+          { path: "src/notes.txt", offset: 0, limit: 8_000 },
+          { path: "src/notes.txt", offset: 8_000, limit: 8_000 },
+          // Named like a skill page, but not one installed under .agents/<name>/.
+          { path: "src/SKILL.md", offset: 0, limit: 8_000 },
+        ],
+      },
+      "several",
+    ),
+  ]);
+  await writeFile(join(f.root, "src/notes.txt"), text);
+  await writeFile(join(f.root, "src/SKILL.md"), text);
+  await f.run();
+  expect(toolResult(f.sent, "several")).toEqual({
+    kind: "untrusted_sources",
+    files: [
+      expect.objectContaining({
+        path: "src/notes.txt",
+        source: "y".repeat(8_000),
+        offset: 0,
+        nextOffset: 8_000,
+      }),
+      expect.objectContaining({
+        path: "src/notes.txt",
+        source: "y".repeat(8_000),
+        offset: 8_000,
+        nextOffset: 16_000,
+      }),
+      expect.objectContaining({
+        path: "src/SKILL.md",
+        source: "y".repeat(8_000),
+        offset: 0,
+        nextOffset: 8_000,
+      }),
+    ],
+  });
 });
