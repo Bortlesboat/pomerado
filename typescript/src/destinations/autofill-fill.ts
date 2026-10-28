@@ -662,17 +662,23 @@ const submitCall = (
  * without clicking (`awaitNewDocument`), as on a code step whose call raced its page
  * (`codeSentBySite`). A code step's page may send the code itself on its last digit while the
  * screen still shows, so on a step whose every field takes a code (`codeOnly`) the host first only
- * looks, for up to `pageSendMs` from the last field's fill: a look that finds the screen as typed,
- * or is lost, looks again, and any other answer is taken as the submit call's would be. Only then
- * does the submit call click.
+ * looks (`lookFirst`), for up to `pageSendMs` from the last field's fill: a look that finds the
+ * screen as typed, or is lost, looks again, and any other answer is taken as the submit call's
+ * would be. Only then does the submit call click. A click again never looks first: its dismiss may
+ * have emptied every box, which a look would take as the page's own send.
  */
-const submitWhenEnabled = (input: CallInput, progress: FillProgress, call: AutofillFillCall) =>
+const submitWhenEnabled = (
+  input: CallInput,
+  progress: FillProgress,
+  call: AutofillFillCall,
+  lookFirst: boolean,
+) =>
   Effect.gen(function* () {
     const started = Date.now();
     const sendMs = sendWindow(input);
     const readsOnly = !hostSubmits(input.step) && sendMs > 0;
     const look =
-      call.kind === "submit" && codeOnly(input.step) && sendMs > 0
+      lookFirst && call.kind === "submit" && codeOnly(input.step) && sendMs > 0
         ? { ...call, look: true as const }
         : undefined;
     let unsentSince: number | undefined;
@@ -968,12 +974,13 @@ export const fillAutofillStep = (input: FillInput): Effect.Effect<AutofillStepRe
  * (`dismissNotice`), or a control is gone or moved where the host refuses it. Then each field the
  * fill typed must still hold something (lengths only, never a value), and each box of a code split
  * across one-character boxes exactly one character, or that field fails and the submit is not
- * attempted; otherwise the submit is judged, guarded and clicked as the fill's own was, and the
- * report says what became of it. A click another element catches again, as one the dismiss did not
- * clear or one with nothing to dismiss, such as a fixed footer, is pressed from the keyboard
- * instead: the host focuses that same submit and presses Enter on it, only once focus landed on it,
- * under the same guard, and reports it `clicked` with `via: "keyboard"`; the element over it is
- * never clicked. When focus goes anywhere else it is `blocked` again.
+ * attempted; otherwise the submit is judged, guarded and clicked as the fill's own was, with no
+ * look first (`submitWhenEnabled`), and the report says what became of it. A click another element
+ * catches again, as one the dismiss did not clear or one with nothing to dismiss, such as a fixed
+ * footer, is pressed from the keyboard instead: the host focuses that same submit and presses Enter
+ * on it, only once focus landed on it, under the same guard, and reports it `clicked` with
+ * `via: "keyboard"`; the element over it is never clicked. When focus goes anywhere else it is
+ * `blocked` again.
  */
 export const resubmitAutofillStep = (input: CallInput): Effect.Effect<AutofillStepReport> =>
   Effect.gen(function* () {
@@ -1075,22 +1082,23 @@ const dismissNotice = (
  * must hold exactly one character before the click. A clicked submit reports where the page went
  * (`navigated`, `reportedNavigation`) only when `typed`, every value the sign-in typed on this
  * browser, is known: a click again, or a fill whose host did not say what it typed before
- * (`typedBefore`), never reports it. `pressCovered`, on a click again only, presses the submit from
- * the keyboard when another element catches its click.
+ * (`typedBefore`), never reports it. `clickAgain`, on a click again only, presses the submit from
+ * the keyboard when another element catches its click, and clicks with no look first.
  */
 const submitStep = (
   input: CallInput,
   progress: FillProgress,
   boxes: readonly number[],
   typed: readonly string[] | undefined,
-  pressCovered = false,
+  clickAgain = false,
 ) =>
   Effect.gen(function* () {
     const { step } = input;
     const clicked = yield* submitWhenEnabled(
       input,
       progress,
-      submitCall(input, progress, boxes, pressCovered),
+      submitCall(input, progress, boxes, clickAgain),
+      !clickAgain,
     );
     if (clicked._tag === "Left")
       return failedCall(progress, clicked.left, { mayMutate: hostSubmits(step) });
